@@ -19,22 +19,20 @@ const ProfileIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 );
 
-// Ikon tambahan untuk tombol ubah foto profil
 const CameraSmallIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
 
 export default function CrewPage({ user, onLogout, onBack }) {
-  // Ambil tab terakhir yang disimpan di localStorage agar ketika di-reload tidak melompat halamannya
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('bengon_active_tab') || 'break';
   });
 
-  // State navigasi internal untuk sub-tab halaman Rank (default disesuaikan hak akses agar aman dari blank screen)
   const [activeRankSubTab, setActiveRankSubTab] = useState(() => {
-    if (user.role === 'crew') return 'crew';
-    if (['stocker', 'quality_control', 'cel'].includes(user.role)) return 'ns';
-    return 'manager';
+    const currentRole = (user?.role || '').toLowerCase().trim();
+    if (['stocker', 'quality_control', 'quality control', 'cel'].includes(currentRole)) return 'ns';
+    if (currentRole === 'manager') return 'manager';
+    return 'crew';
   });
 
   const [currentBreak, setCurrentBreak] = useState(null);
@@ -53,7 +51,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
   const [dbProfileUrl, setDbProfileUrl] = useState(null);
   const [greeting, setGreeting] = useState('Selamat Bekerja');
 
-  // State Filter History Log
   const [searchName, setSearchName] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterTime, setFilterTime] = useState('month');
@@ -72,14 +69,10 @@ export default function CrewPage({ user, onLogout, onBack }) {
     "Kerja cerdas, kerja ikhlas. Energi positifmu menular ke seluruh tim! 🤝"
   ];
 
-  // =========================================================
-  // 📍 DATA KOORDINAT OUTLET MIE GACOAN BALIKPAPAN MT HARYONO
-  // =========================================================
   const RESTO_LAT = -1.242491; 
   const RESTO_LNG = 116.861343; 
   const RADIUS_MAKSIMAL_METER = 50;
 
-  // Rumus Haversine menghitung meteran jarak asli di bumi
   const checkGeofenceRadius = (lat1, lon1, lat2, lon2) => {
     const R = 6371000; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -99,17 +92,14 @@ export default function CrewPage({ user, onLogout, onBack }) {
     }
   };
 
-  // Simpan riwayat tab aktif saat ini ke local storage agar persisten sewaktu direfresh
   useEffect(() => {
     localStorage.setItem('bengon_active_tab', activeTab);
   }, [activeTab]);
 
-  // --- AI VOICE REMINDER TEXT-TO-SPEECH ---
   const playAlarmSound = (type, crewName = '') => {
     try {
       const synth = window.speechSynthesis;
       if (!synth) return;
-
       synth.cancel(); 
 
       let textToSpeak = '';
@@ -123,14 +113,12 @@ export default function CrewPage({ user, onLogout, onBack }) {
       utterance.lang = 'id-ID'; 
       utterance.rate = 1.0;     
       utterance.pitch = 1.1;    
-
       synth.speak(utterance);
     } catch (e) {
       console.log("AI Speech diblokir browser.");
     }
   };
 
-  // --- FUNGSI GEOTAG LOCK LOKASI GPS ---
   const getCurrentLocation = () => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
@@ -140,7 +128,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
         (position) => {
           resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
         },
-        (error) => {
+        () => {
           resolve({ lat: null, lng: null });
         },
         { enableHighAccuracy: true, timeout: 5000 }
@@ -204,7 +192,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   }, [currentBreak, hasReminded]);
 
   const fetchUserDBData = async () => {
-    const { data } = await supabase.from('users').select('points, profile_url').eq('id', user.id).maybeSingle();
+    const { data } = await supabase.from('users').select('points, profile_url').eq('id', user?.id).maybeSingle();
     if (data) {
       if (data.points !== undefined && data.points !== null) setDbUserPoints(data.points);
       if (data.profile_url) setDbProfileUrl(data.profile_url);
@@ -212,7 +200,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   };
 
   const fetchActiveBreak = async () => {
-    const { data } = await supabase.from('break_logs').select('*').eq('user_id', user.id).eq('status', 'on_break').maybeSingle();
+    const { data } = await supabase.from('break_logs').select('*').eq('user_id', user?.id).eq('status', 'on_break').maybeSingle();
     if (data) setCurrentBreak(data);
   };
 
@@ -253,7 +241,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
     if (data) setHistory(data);
   };
 
-  // --- LOGIKA UTAMA: PERLEBAR SLICE DATA KELUARAN SUPABASE AGAR DATA TIDAK HILANG ---
   const fetchMetrics = async () => {
     const { data: logs } = await supabase.from('break_logs').select('*, users(name, role)');
     if (!logs) return;
@@ -338,7 +325,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
       setUploading(true);
       const location = await getCurrentLocation();
 
-      // --- VALIDASI GEOLOCK MULTILATERAL REKREASI RESTO ---
       if (!location.lat || !location.lng) {
         alert("🚨 VALIDASI GPS GAGAL!\nHarap pastikan pengaturan GPS/Lokasi di HP kamu sudah AKTIF sebelum melakukan absen break.");
         setUploading(false);
@@ -486,10 +472,9 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
   const getProfileAvatar = () => {
     if (dbProfileUrl) return dbProfileUrl;
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff&bold=true`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=0D8ABC&color=fff&bold=true`;
   };
 
-  // --- SOLUSI FILTER LEVEL RENDER: SINKRONISASI COCOK PERAN HAK AKSES JABATAN ---
   const isRoleMatchingTab = (dbRole, selectedTab) => {
     if (!dbRole) return false;
     const lowerRole = dbRole.toLowerCase().replace('_', ' ').trim();
@@ -499,7 +484,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
     return false;
   };
 
-  // Membagi penomoran peringkat dinamis terisolasi per sub-tab yang aktif klik harian
   const getFilteredLeaderboardList = (listType) => {
     const baseList = listType === 'efficient' ? leaderboard.efficient : leaderboard.undisciplined;
     return baseList.filter(u => isRoleMatchingTab(u.role, activeRankSubTab)).slice(0, 5);
@@ -508,7 +492,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
   return (
     <div className="min-h-screen bg-[#0a0f1d] text-slate-200 font-sans pb-24 relative overflow-hidden flex flex-col justify-between tracking-tight">
       
-      {/* HEADER UTAMA: LUXURY SLATE DENGAN MINI AVATAR BULAT STRATEGIS */}
       <div className="bg-[#141b2b]/95 border-b border-slate-800/80 backdrop-blur-md px-5 py-4 flex justify-between items-center sticky top-0 z-50 max-w-md w-full mx-auto rounded-b-2xl shadow-xl">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full p-0.5 bg-gradient-to-tr from-blue-500 via-slate-700 to-emerald-400 shadow-md">
@@ -516,11 +499,11 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
           <div>
             <span className="text-[10px] font-mono tracking-widest text-blue-400 font-extrabold uppercase">BPPHAR SYSTEM</span>
-            <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user.name}</h1>
+            <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user?.name}</h1>
           </div>
         </div>
         <div className="flex gap-1.5">
-          {user.role === 'manager' && (
+          {user?.role === 'manager' && (
             <button onClick={onBack} className="bg-slate-900/80 hover:bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-300">Hub</button>
           )}
           <button onClick={onLogout} className="bg-rose-950/60 border border-rose-900/40 hover:bg-rose-900/30 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-rose-400">Keluar</button>
@@ -529,7 +512,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
       <div className="flex-1 p-5 max-w-md w-full mx-auto space-y-4">
 
-        {/* TAB 1: BREAK */}
         {activeTab === 'break' && (
           <div className="space-y-5 animate-fadeIn">
             <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl flex items-center gap-3 shadow-inner">
@@ -602,7 +584,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 2: LIVE */}
         {activeTab === 'live' && (
           <div className="space-y-4 animate-fadeIn">
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
@@ -627,7 +608,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                         <img src={log.photo_url} className="h-10 w-10 rounded-full object-cover border border-slate-700 shadow-sm" alt="" />
                         <div>
                           <h4 className="text-xs font-black text-white capitalize">{log.users?.name} {log.user_id === user.id && <span className="text-[9px] text-blue-400 font-normal">(Kamu)</span>}</h4>
-                          <p className="text-[9px] font-mono font-bold text-slate-500 uppercase mt-0.5">{log.users?.role?.replace('_',' ')}</p>
+                          <p className="text-[9px] font-mono font-bold text-slate-400 uppercase mt-0.5">{log.users?.role?.replace('_',' ')}</p>
                         </div>
                       </div>
                       <div className="text-right font-mono">
@@ -642,15 +623,13 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 3: LEADERBOARD INTERAKTIF (PENGAMAN FILTER JABATAN KOMPLIT) */}
         {activeTab === 'leaderboard' && (
           <div className="space-y-4 animate-fadeIn">
-            {/* Navigasi Sub-Tab Pilihan Jabatan */}
             <div className="flex bg-[#0f1422] p-1 rounded-xl border border-slate-800 shadow-inner">
-              {user.role === 'manager' && (
+              {user?.role === 'manager' && (
                 <button onClick={() => setActiveRankSubTab('manager')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'manager' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Manager</button>
               )}
-              {['manager', 'stocker', 'quality_control', 'cel'].includes(user.role) && (
+              {['manager', 'stocker', 'quality_control', 'cel'].includes(user?.role) && (
                 <button onClick={() => setActiveRankSubTab('ns')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'ns' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>New Structure</button>
               )}
               <button onClick={() => setActiveRankSubTab('crew')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'crew' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Crew</button>
@@ -692,7 +671,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 4: HISTORY */}
         {activeTab === 'history' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl space-y-2 flex flex-col">
@@ -713,7 +691,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 </select>
               </div>
               <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-[#0b0f19] border border-slate-800/60 px-3 py-2 rounded-xl text-xs text-slate-300 outline-none cursor-pointer" style={{ colorScheme: 'dark' }} />
-              {filterDate && <button onClick={() => setFilterDate('')} className="text-[10px] text-rose-400 font-bold py-1 bg-rose-500/10 rounded-lg">Reset Kalender</button>}
             </div>
 
             <div className="space-y-2">
@@ -751,16 +728,8 @@ export default function CrewPage({ user, onLogout, onBack }) {
                             <div className="h-9 w-9 rounded-full border border-slate-800 border-dashed flex items-center justify-center text-[8px] text-slate-600 font-sans">Jalan...</div>
                           )}
                         </div>
-                        
                         {log.latitude && (
-                          <a 
-                            href={`http://googleusercontent.com/maps.google.com/?q=${log.latitude},${log.longitude}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20"
-                          >
-                            📍 Lokasi GPS
-                          </a>
+                          <a href={`http://googleusercontent.com/maps.google.com/?q=${log.latitude},${log.longitude}`} target="_blank" rel="noreferrer" className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20">📍 Lokasi GPS</a>
                         )}
                       </div>
 
@@ -776,7 +745,6 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="bg-gradient-to-br from-[#141b2b] via-[#141b2b] to-[#0b0f19] border border-slate-800/60 p-6 rounded-[2rem] shadow-xl text-center relative overflow-hidden">
@@ -790,9 +758,9 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 <input type="file" hidden ref={profileInputRef} accept="image/*" onChange={handleProfileImageUpload} disabled={uploading} />
               </div>
 
-              <h2 className="text-base font-black tracking-tight text-white capitalize">{user.name}</h2>
+              <h2 className="text-base font-black tracking-tight text-white capitalize">{user?.name}</h2>
               <span className="inline-block bg-[#0b0f19]/60 border border-slate-800/50 px-3 py-0.5 rounded-full text-[9px] font-mono uppercase font-black tracking-wider mt-1.5 text-slate-300">
-                ROLE: {user.role.replace('_',' ')}
+                ROLE: {user?.role?.replace('_',' ')}
               </span>
 
               <div className="grid grid-cols-2 gap-2.5 mt-6 font-mono">

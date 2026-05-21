@@ -30,6 +30,13 @@ export default function CrewPage({ user, onLogout, onBack }) {
     return localStorage.getItem('bengon_active_tab') || 'break';
   });
 
+  // State navigasi internal untuk sub-tab halaman Rank (default disesuaikan hak akses agar aman dari blank screen)
+  const [activeRankSubTab, setActiveRankSubTab] = useState(() => {
+    if (user.role === 'crew') return 'crew';
+    if (['stocker', 'quality_control', 'cel'].includes(user.role)) return 'ns';
+    return 'manager';
+  });
+
   const [currentBreak, setCurrentBreak] = useState(null);
   const [history, setHistory] = useState([]);
   const [leaderboard, setLeaderboard] = useState({ efficient: [], undisciplined: [] });
@@ -64,6 +71,25 @@ export default function CrewPage({ user, onLogout, onBack }) {
     "Utamakan keselamatan kerja dan kualitas pelayanan ya, Bos! ✨",
     "Kerja cerdas, kerja ikhlas. Energi positifmu menular ke seluruh tim! 🤝"
   ];
+
+  // =========================================================
+  // 📍 DATA KOORDINAT OUTLET MIE GACOAN BALIKPAPAN MT HARYONO
+  // =========================================================
+  const RESTO_LAT = -1.242491; 
+  const RESTO_LNG = 116.861343; 
+  const RADIUS_MAKSIMAL_METER = 50;
+
+  // Rumus Haversine menghitung meteran jarak asli di bumi
+  const checkGeofenceRadius = (lat1, lon1, lat2, lon2) => {
+    const R = 6371000; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
 
   const toWITATime = (dateObj) => {
     try {
@@ -227,6 +253,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
     if (data) setHistory(data);
   };
 
+  // --- LOGIKA UTAMA: PERLEBAR SLICE DATA KELUARAN SUPABASE AGAR DATA TIDAK HILANG ---
   const fetchMetrics = async () => {
     const { data: logs } = await supabase.from('break_logs').select('*, users(name, role)');
     if (!logs) return;
@@ -234,7 +261,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
     const stats = {};
     logs.forEach(log => {
       if (!stats[log.user_id]) {
-        stats[log.user_id] = { name: log.users?.name, role: log.users?.role, totalOverMinutes: 0, violationCount: 0 };
+        stats[log.user_id] = { id: log.user_id, name: log.users?.name, role: log.users?.role, totalOverMinutes: 0, violationCount: 0 };
       }
       if (log.end_time) {
         const duration = (new Date(log.end_time) - new Date(log.start_time)) / 60000;
@@ -246,8 +273,8 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
     const sorted = Object.values(stats);
     setLeaderboard({
-      efficient: [...sorted].sort((a, b) => a.totalOverMinutes - b.totalOverMinutes).slice(0, 3),
-      undisciplined: [...sorted].filter(u => u.violationCount > 0).sort((a, b) => b.violationCount - a.violationCount).slice(0, 3)
+      efficient: [...sorted].sort((a, b) => a.totalOverMinutes - b.totalOverMinutes).slice(0, 30),
+      undisciplined: [...sorted].filter(u => u.violationCount > 0).sort((a, b) => b.violationCount - a.violationCount).slice(0, 30)
     });
   };
 
@@ -310,6 +337,20 @@ export default function CrewPage({ user, onLogout, onBack }) {
     try {
       setUploading(true);
       const location = await getCurrentLocation();
+
+      // --- VALIDASI GEOLOCK MULTILATERAL REKREASI RESTO ---
+      if (!location.lat || !location.lng) {
+        alert("🚨 VALIDASI GPS GAGAL!\nHarap pastikan pengaturan GPS/Lokasi di HP kamu sudah AKTIF sebelum melakukan absen break.");
+        setUploading(false);
+        return;
+      }
+
+      const jarakKeGacoan = checkGeofenceRadius(location.lat, location.lng, RESTO_LAT, RESTO_LNG);
+      if (jarakKeGacoan > RADIUS_MAKSIMAL_METER) {
+        alert(`🚨 AKSES ABSENSI DITOLAK!\nKamu terdeteksi berada ${Math.round(jarakKeGacoan)} meter di luar area Mie Gacoan Balikpapan MT Haryono. Silakan mendekat kembali ke area radius 50 meter sekitar outlet untuk absen!`);
+        setUploading(false);
+        return;
+      }
 
       const blob = dataURLtoBlob(imageSrc);
       const fileName = `${user.id}-${Date.now()}-${cameraMode}.jpg`;
@@ -448,61 +489,83 @@ export default function CrewPage({ user, onLogout, onBack }) {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff&bold=true`;
   };
 
+  // --- SOLUSI FILTER LEVEL RENDER: SINKRONISASI COCOK PERAN HAK AKSES JABATAN ---
+  const isRoleMatchingTab = (dbRole, selectedTab) => {
+    if (!dbRole) return false;
+    const lowerRole = dbRole.toLowerCase().replace('_', ' ').trim();
+    if (selectedTab === 'manager') return lowerRole === 'manager';
+    if (selectedTab === 'ns') return ['stocker', 'quality control', 'cel'].includes(lowerRole);
+    if (selectedTab === 'crew') return lowerRole === 'crew';
+    return false;
+  };
+
+  // Membagi penomoran peringkat dinamis terisolasi per sub-tab yang aktif klik harian
+  const getFilteredLeaderboardList = (listType) => {
+    const baseList = listType === 'efficient' ? leaderboard.efficient : leaderboard.undisciplined;
+    return baseList.filter(u => isRoleMatchingTab(u.role, activeRankSubTab)).slice(0, 5);
+  };
+
   return (
-    <div className="min-h-screen bg-[#070a11] text-slate-100 font-sans pb-24 relative overflow-hidden flex flex-col justify-between">
+    <div className="min-h-screen bg-[#0a0f1d] text-slate-200 font-sans pb-24 relative overflow-hidden flex flex-col justify-between tracking-tight">
       
-      <div className="bg-slate-900/60 border-b border-slate-800/80 backdrop-blur-xl px-5 py-4 flex justify-between items-center sticky top-0 z-50 max-w-md w-full mx-auto rounded-b-2xl">
-        <div>
-          <span className="text-[9px] font-mono tracking-widest text-blue-400 font-bold uppercase">BPPHAR SYSTEM</span>
-          <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user.name}</h1>
+      {/* HEADER UTAMA: LUXURY SLATE DENGAN MINI AVATAR BULAT STRATEGIS */}
+      <div className="bg-[#141b2b]/95 border-b border-slate-800/80 backdrop-blur-md px-5 py-4 flex justify-between items-center sticky top-0 z-50 max-w-md w-full mx-auto rounded-b-2xl shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full p-0.5 bg-gradient-to-tr from-blue-500 via-slate-700 to-emerald-400 shadow-md">
+            <img src={getProfileAvatar()} className="w-full h-full object-cover rounded-full bg-slate-900" alt="" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono tracking-widest text-blue-400 font-extrabold uppercase">BPPHAR SYSTEM</span>
+            <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user.name}</h1>
+          </div>
         </div>
         <div className="flex gap-1.5">
           {user.role === 'manager' && (
-            <button onClick={onBack} className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400">Hub</button>
+            <button onClick={onBack} className="bg-slate-900/80 hover:bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-300">Hub</button>
           )}
-          <button onClick={onLogout} className="bg-rose-950/40 border border-rose-900/60 hover:bg-rose-900/30 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-rose-400">Keluar</button>
+          <button onClick={onLogout} className="bg-rose-950/60 border border-rose-900/40 hover:bg-rose-900/30 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-rose-400">Keluar</button>
         </div>
       </div>
 
-      <div className="flex-1 p-5 max-w-md w-full mx-auto">
+      <div className="flex-1 p-5 max-w-md w-full mx-auto space-y-4">
 
         {/* TAB 1: BREAK */}
         {activeTab === 'break' && (
-          <div className="space-y-5">
-            <div className="bg-gradient-to-r from-blue-900/20 to-slate-900/40 border border-slate-800/60 p-4 rounded-2xl flex items-center gap-3 shadow-md">
+          <div className="space-y-5 animate-fadeIn">
+            <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl flex items-center gap-3 shadow-inner">
               <span className="text-base">💡</span>
               <p className="text-[11px] font-medium text-slate-300 italic">"{dailyQuote}"</p>
             </div>
 
             <div className="text-center py-1">
-              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-[10px] uppercase border
+              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-extrabold text-[10px] uppercase border tracking-wider
                 ${status === 'Standby Kerja' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
                 ${status === 'Sedang Istirahat' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse' : ''}
-                ${status === 'Waktu Break Habis (Over!)' ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : ''}
+                ${status.includes('Habis') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
               `}>
-                <span className={`h-1.5 w-1.5 rounded-full ${status === 'Standby Kerja' ? 'bg-emerald-400' : status === 'Sedang Istirahat' ? 'bg-blue-400' : 'bg-rose-400'}`}></span>
+                <span className={`h-1.5 w-1.5 rounded-full ${status === 'Standby Kerja' ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
                 {status}
               </div>
             </div>
 
-            <div className="bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800/80 p-8 rounded-[2.5rem] shadow-2xl text-center backdrop-blur-xl relative">
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">DURASI ISTIRAHAT (MAKS 60 MENIT)</p>
-              <div className="text-5xl font-mono font-black text-white tracking-tight">
+            <div className="bg-gradient-to-b from-[#141b2b] to-[#0f1422] border border-slate-800/70 p-8 rounded-[2.5rem] shadow-2xl text-center relative">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3 font-mono">DURASI ISTIRAHAT TIM</p>
+              <div className="text-5xl font-mono font-black text-white tracking-tight drop-shadow-sm">
                 {formatTimer(timer)}
               </div>
-              <div className="h-1.5 bg-slate-950 rounded-full mt-6 overflow-hidden p-0.5 border border-slate-900">
+              <div className="h-1.5 bg-slate-950 rounded-full mt-6 overflow-hidden p-0.5 border border-slate-800">
                 <div 
-                  className={`h-full rounded-full transition-all duration-1000 ${timer > 3600 ? 'bg-rose-500 shadow-[0_0_10px_#f43f5e]' : 'bg-blue-500 shadow-[0_0_10px_#3b82f6]'}`}
+                  className={`h-full rounded-full transition-all duration-1000 ${timer > 3600 ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-blue-500 shadow-[0_0_8px_#3b82f6]'}`}
                   style={{ width: `${Math.min((timer / 3600) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>
 
             {showCamera && (
-              <div className="overflow-hidden rounded-2xl border border-blue-500/40 shadow-lg relative bg-slate-950">
+              <div className="overflow-hidden rounded-2xl border border-blue-500/30 shadow-md relative bg-slate-900">
                 <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full object-cover scale-x-[-1]" />
-                <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[8px] text-blue-400 font-bold uppercase tracking-wide">
-                  📍 GEOTAG LOCK AKTIF
+                <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] text-emerald-400 font-bold uppercase tracking-wide">
+                  📍 MI GACOAN MT HARYONO GEOFENCE
                 </div>
               </div>
             )}
@@ -516,21 +579,21 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 ) : (
                   <div className="flex gap-2">
                     <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
-                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest">
-                      {uploading ? 'Mengunci GPS...' : 'Foto & Mulai Break'}
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl text-xs tracking-widest uppercase">
+                      {uploading ? 'Memeriksa GPS...' : 'Foto & Mulai Break'}
                     </button>
                   </div>
                 )
               ) : (
                 !showCamera ? (
-                  <button onClick={() => triggerCamera('end')} className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-black py-4 px-4 rounded-2xl shadow-xl transition-all text-xs tracking-widest">
+                  <button onClick={() => triggerCamera('end')} className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-black py-4 px-4 rounded-2xl shadow-xl transition-all text-xs tracking-widest uppercase">
                     🧳 Selesai Istirahat (Kembali Kerja)
                   </button>
                 ) : (
                   <div className="flex gap-2">
                     <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
-                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest">
-                      {uploading ? 'Verifikasi GPS...' : 'Foto & Selesai'}
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl text-xs tracking-widest uppercase">
+                      {uploading ? 'Memproses GPS...' : 'Foto & Selesai'}
                     </button>
                   </div>
                 )
@@ -541,7 +604,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
         {/* TAB 2: LIVE */}
         {activeTab === 'live' && (
-          <div className="space-y-4">
+          <div className="space-y-4 animate-fadeIn">
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -551,7 +614,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
             </h3>
 
             {history.filter(h => !h.end_time).length === 0 ? (
-              <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-8 text-center text-slate-500 text-xs font-medium font-mono">
+              <div className="bg-[#141b2b]/40 border border-slate-800/50 rounded-2xl p-8 text-center text-slate-400 text-xs font-mono">
                 Saat ini tidak ada rekan tim yang sedang beristirahat.
               </div>
             ) : (
@@ -559,12 +622,12 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 {history.filter(h => !h.end_time).map((log) => {
                   const start = toWITATime(new Date(log.start_time));
                   return (
-                    <div key={log.id} className="bg-slate-900/50 border border-slate-800/80 p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-blue-500">
+                    <div key={log.id} className="bg-[#141b2b]/70 border border-slate-800/50 p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-blue-500 shadow-sm">
                       <div className="flex items-center gap-3">
-                        <img src={log.photo_url} className="h-10 w-10 rounded-xl object-cover border border-slate-700 shadow-sm" alt="" />
+                        <img src={log.photo_url} className="h-10 w-10 rounded-full object-cover border border-slate-700 shadow-sm" alt="" />
                         <div>
                           <h4 className="text-xs font-black text-white capitalize">{log.users?.name} {log.user_id === user.id && <span className="text-[9px] text-blue-400 font-normal">(Kamu)</span>}</h4>
-                          <p className="text-[9px] font-mono font-bold text-slate-500 uppercase mt-0.5">{log.users?.role.replace('_',' ')}</p>
+                          <p className="text-[9px] font-mono font-bold text-slate-500 uppercase mt-0.5">{log.users?.role?.replace('_',' ')}</p>
                         </div>
                       </div>
                       <div className="text-right font-mono">
@@ -579,34 +642,51 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 3: LEADERBOARD */}
+        {/* TAB 3: LEADERBOARD INTERAKTIF (PENGAMAN FILTER JABATAN KOMPLIT) */}
         {activeTab === 'leaderboard' && (
-          <div className="space-y-4">
-            <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-3xl shadow-sm">
-              <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Poin Tertinggi</h4>
-              <div className="divide-y divide-slate-800/40 text-xs">
-                {leaderboard.efficient.slice(0, 3).map((u, i) => (
-                  <div key={i} className="py-2.5 flex justify-between items-center">
-                    <span className="font-bold text-slate-300">{i + 1}. {u.name} <span className="text-[8px] font-mono text-slate-500 uppercase">({u.role})</span></span>
-                    <span className="text-emerald-400 font-mono font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
-                  </div>
-                ))}
-              </div>
+          <div className="space-y-4 animate-fadeIn">
+            {/* Navigasi Sub-Tab Pilihan Jabatan */}
+            <div className="flex bg-[#0f1422] p-1 rounded-xl border border-slate-800 shadow-inner">
+              {user.role === 'manager' && (
+                <button onClick={() => setActiveRankSubTab('manager')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'manager' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Manager</button>
+              )}
+              {['manager', 'stocker', 'quality_control', 'cel'].includes(user.role) && (
+                <button onClick={() => setActiveRankSubTab('ns')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'ns' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>New Structure</button>
+              )}
+              <button onClick={() => setActiveRankSubTab('crew')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'crew' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Crew</button>
             </div>
 
-            <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-3xl shadow-sm">
-              <h4 className="text-xs font-black uppercase text-rose-400 tracking-wider mb-3 flex items-center gap-1.5">⚠️ Peringkat Kru Paling Bebal (&gt;60m)</h4>
-              <div className="divide-y divide-slate-800/40 text-xs">
-                {leaderboard.undisciplined.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4 font-medium">Buku pelanggaran bersih. Pertahankan! 👍</p>
-                ) : (
-                  leaderboard.undisciplined.slice(0, 3).map((u, i) => (
-                    <div key={i} className="py-2.5 flex justify-between items-center">
-                      <span className="font-bold text-slate-300">{i + 1}. {u.name}</span>
-                      <span className="bg-rose-500/10 text-rose-400 border border-rose-900/30 px-2 py-0.5 rounded text-[10px] font-mono font-bold">{u.violationCount}x Melanggar</span>
-                    </div>
-                  ))
-                )}
+            <div className="space-y-4">
+              <div className="bg-[#141b2b]/70 border border-slate-800/60 p-5 rounded-3xl shadow-sm">
+                <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Poin Tertinggi</h4>
+                <div className="divide-y divide-slate-800/40 text-xs font-mono">
+                  {getFilteredLeaderboardList('efficient').length === 0 ? (
+                    <p className="text-slate-400 text-center py-4 text-[11px]">Belum ada data nilai divisi terkumpul Bos.</p>
+                  ) : (
+                    getFilteredLeaderboardList('efficient').map((u, i) => (
+                      <div key={u.id || i} className="py-2.5 flex justify-between items-center">
+                        <span className="font-bold text-slate-200">{i + 1}. {u.name} <span className="text-[9px] text-slate-500 font-normal">({u.role?.replace('_', ' ')})</span></span>
+                        <span className="text-emerald-400 font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-[#141b2b]/70 border border-slate-800/60 p-5 rounded-3xl shadow-sm">
+                <h4 className="text-xs font-black uppercase text-rose-400 tracking-wider mb-3 flex items-center gap-1.5">⚠️ Peringkat Paling Bebal (&gt;60m)</h4>
+                <div className="divide-y divide-slate-800/40 text-xs font-mono">
+                  {getFilteredLeaderboardList('undisciplined').length === 0 ? (
+                    <p className="text-slate-400 text-center py-4 text-[11px]">🎉 Buku pelanggaran divisi ini bersih Bos!</p>
+                  ) : (
+                    getFilteredLeaderboardList('undisciplined').map((u, i) => (
+                      <div key={u.id || i} className="py-2.5 flex justify-between items-center">
+                        <span className="font-bold text-slate-300">{i + 1}. {u.name} <span className="text-[9px] text-slate-500 font-normal">({u.role?.replace('_', ' ')})</span></span>
+                        <span className="bg-rose-500/20 text-rose-400 border border-rose-900/30 px-2 py-0.5 rounded text-[10px] font-bold">{u.violationCount}x Melanggar</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -614,11 +694,11 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
         {/* TAB 4: HISTORY */}
         {activeTab === 'history' && (
-          <div className="space-y-4">
-            <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl space-y-2 flex flex-col">
-              <input type="text" placeholder="Cari nama kru..." value={searchName} onChange={(e) => setSearchName(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-200 outline-none focus:border-blue-500 w-full" />
+          <div className="space-y-4 animate-fadeIn">
+            <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl space-y-2 flex flex-col">
+              <input type="text" placeholder="Cari nama kru..." value={searchName} onChange={(e) => setSearchName(e.target.value)} className="border border-slate-800/60 px-3 py-2 rounded-xl text-xs bg-[#0b0f19] text-slate-200 outline-none w-full" />
               <div className="grid grid-cols-2 gap-2">
-                <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-400 font-bold outline-none">
+                <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="border border-slate-800/60 px-3 py-2 rounded-xl text-xs bg-[#0b0f19] text-slate-400 font-bold outline-none">
                   <option value="all">Semua Jabatan</option>
                   <option value="crew">Crew</option>
                   <option value="stocker">Stocker</option>
@@ -626,13 +706,13 @@ export default function CrewPage({ user, onLogout, onBack }) {
                   <option value="cel">Cel</option>
                   <option value="manager">Manager</option>
                 </select>
-                <select value={filterTime} disabled={!!filterDate} onChange={(e) => setFilterTime(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-400 font-bold outline-none disabled:opacity-40">
+                <select value={filterTime} disabled={!!filterDate} onChange={(e) => setFilterTime(e.target.value)} className="border border-slate-800/60 px-3 py-2 rounded-xl text-xs bg-[#0b0f19] text-slate-400 font-bold outline-none disabled:opacity-40">
                   <option value="day">Hari Ini</option>
                   <option value="week">7 Hari Lalu</option>
                   <option value="month">30 Hari Lalu</option>
                 </select>
               </div>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-300 outline-none cursor-pointer" style={{ colorScheme: 'dark' }} />
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-[#0b0f19] border border-slate-800/60 px-3 py-2 rounded-xl text-xs text-slate-300 outline-none cursor-pointer" style={{ colorScheme: 'dark' }} />
               {filterDate && <button onClick={() => setFilterDate('')} className="text-[10px] text-rose-400 font-bold py-1 bg-rose-500/10 rounded-lg">Reset Kalender</button>}
             </div>
 
@@ -643,11 +723,11 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 history.map((log) => {
                   const start = toWITATime(new Date(log.start_time));
                   return (
-                    <div key={log.id} className="bg-slate-900/30 border border-slate-800/60 p-4 rounded-xl flex flex-col gap-3 font-mono text-xs shadow-md">
+                    <div key={log.id} className="bg-[#141b2b]/50 border border-slate-800/50 p-4 rounded-xl flex flex-col gap-3 font-mono text-xs shadow-sm">
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-bold text-slate-200 capitalize">{log.users?.name}</h4>
-                          <span className="text-[8px] uppercase font-bold text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 inline-block mt-1">{log.users?.role.replace('_',' ')}</span>
+                          <span className="text-[8px] uppercase font-bold text-slate-400 bg-[#0b0f19] px-1.5 py-0.5 rounded border border-slate-800 inline-block mt-1">{log.users?.role?.replace('_',' ')}</span>
                         </div>
                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border
                           ${log.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
@@ -658,23 +738,23 @@ export default function CrewPage({ user, onLogout, onBack }) {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between bg-slate-950/40 p-2 rounded-xl border border-slate-900/50">
+                      <div className="flex items-center justify-between bg-[#0b0f19]/60 p-2 rounded-xl border border-slate-800/50">
                         <div className="flex gap-2">
                           <a href={log.photo_url} target="_blank" rel="noreferrer" title="Foto Mulai">
-                            <img src={log.photo_url} className="h-9 w-9 object-cover rounded-lg border border-slate-700 shadow" alt="In" />
+                            <img src={log.photo_url} className="h-9 w-9 object-cover rounded-full border border-slate-700 shadow" alt="In" />
                           </a>
                           {log.photo_end_url ? (
                             <a href={log.photo_end_url} target="_blank" rel="noreferrer" title="Foto Selesai">
-                              <img src={log.photo_end_url} className="h-9 w-9 object-cover rounded-lg border border-slate-700 shadow" alt="Out" />
+                              <img src={log.photo_end_url} className="h-9 w-9 object-cover rounded-full border border-slate-700 shadow" alt="Out" />
                             </a>
                           ) : (
-                            <div className="h-9 w-9 rounded-lg border border-slate-800 border-dashed flex items-center justify-center text-[8px] text-slate-600 font-sans">Jalan...</div>
+                            <div className="h-9 w-9 rounded-full border border-slate-800 border-dashed flex items-center justify-center text-[8px] text-slate-600 font-sans">Jalan...</div>
                           )}
                         </div>
                         
                         {log.latitude && (
                           <a 
-                            href={`https://www.google.com/maps?q=${log.latitude},${log.longitude}`} 
+                            href={`http://googleusercontent.com/maps.google.com/?q=${log.latitude},${log.longitude}`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20"
@@ -684,9 +764,9 @@ export default function CrewPage({ user, onLogout, onBack }) {
                         )}
                       </div>
 
-                      <div className="flex justify-between text-[10px] text-slate-500 border-t border-slate-900/60 pt-2 font-mono">
+                      <div className="flex justify-between text-[10px] text-slate-400 border-t border-slate-800/40 pt-2 font-mono">
                         <span>{start.toLocaleDateString('id-ID')} ({start.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit' })})</span>
-                        <span className="font-black text-slate-300">{log.end_time ? `${Math.round((new Date(log.end_time) - new Date(log.start_time)) / 60000)} menit` : 'Berjalan...'}</span>
+                        <span className="font-black text-slate-200">{log.end_time ? `${Math.round((new Date(log.end_time) - new Date(log.start_time)) / 60000)} menit` : 'Berjalan...'}</span>
                       </div>
                     </div>
                   );
@@ -696,31 +776,31 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 5: PROFILE CARD INTEGRATED (FIXED BLANK BUG) */}
+        {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && (
           <div className="space-y-4 animate-fadeIn">
-            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-[2rem] shadow-xl text-center relative overflow-hidden">
+            <div className="bg-gradient-to-br from-[#141b2b] via-[#141b2b] to-[#0b0f19] border border-slate-800/60 p-6 rounded-[2rem] shadow-xl text-center relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-r from-blue-600/10 to-teal-500/10 blur-xl"></div>
               
-              <div className="relative h-20 h-20 w-20 mx-auto mb-3 z-10">
-                <img src={getProfileAvatar()} className="w-full h-full object-cover rounded-2xl border-2 border-slate-700 shadow-md" alt="" />
-                <button onClick={() => profileInputRef.current.click()} className="absolute -bottom-1 -right-1 bg-blue-600 p-1.5 rounded-lg border border-slate-900 text-white hover:bg-blue-500 shadow-lg flex items-center justify-center">
+              <div className="relative h-24 w-24 mx-auto mb-4 p-1 bg-gradient-to-tr from-blue-500 via-slate-700 to-emerald-400 rounded-full shadow-lg z-10">
+                <img src={getProfileAvatar()} className="w-full h-full object-cover rounded-full bg-slate-950" alt="" />
+                <button onClick={() => profileInputRef.current.click()} className="absolute bottom-0 right-0 bg-blue-600 p-2 rounded-full border-2 border-[#070a11] text-white hover:bg-blue-500 shadow-md flex items-center justify-center transition-transform active:scale-90">
                   <CameraSmallIcon />
                 </button>
                 <input type="file" hidden ref={profileInputRef} accept="image/*" onChange={handleProfileImageUpload} disabled={uploading} />
               </div>
 
               <h2 className="text-base font-black tracking-tight text-white capitalize">{user.name}</h2>
-              <span className="inline-block bg-slate-800/60 border border-slate-700/50 px-3 py-0.5 rounded-full text-[9px] font-mono uppercase font-black tracking-wider mt-1 text-slate-300">
+              <span className="inline-block bg-[#0b0f19]/60 border border-slate-800/50 px-3 py-0.5 rounded-full text-[9px] font-mono uppercase font-black tracking-wider mt-1.5 text-slate-300">
                 ROLE: {user.role.replace('_',' ')}
               </span>
 
               <div className="grid grid-cols-2 gap-2.5 mt-6 font-mono">
-                <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-900 text-center">
+                <div className="bg-[#0b0f19]/60 p-3 rounded-2xl border border-slate-800/50 text-center flex flex-col justify-center">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Badge Bulan Ini</p>
                   <p className="text-[10px] font-bold text-amber-400 mt-1">👑 {getBadge().label}</p>
                 </div>
-                <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-900 text-center">
+                <div className="bg-[#0b0f19]/60 p-3 rounded-2xl border border-slate-800/50 text-center">
                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Poin Reward</p>
                   <p className="text-sm font-black text-blue-400 mt-0.5">{dbUserPoints} <span className="text-[9px] text-slate-500">PTS</span></p>
                 </div>
@@ -735,33 +815,12 @@ export default function CrewPage({ user, onLogout, onBack }) {
       </div>
 
       {/* --- FIXED BOTTOM NAVIGATION BAR --- */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-950/90 border-t border-slate-900 backdrop-blur-xl py-2 px-4 flex justify-around items-center z-50 max-w-md mx-auto rounded-t-3xl shadow-2xl">
-        
-        <button onClick={() => setActiveTab('break')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'break' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
-          <BreakIcon />
-          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Break</span>
-        </button>
-
-        <button onClick={() => setActiveTab('live')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'live' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
-          <LiveIcon />
-          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Live</span>
-        </button>
-
-        <button onClick={() => setActiveTab('leaderboard')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'leaderboard' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
-          <RankIcon />
-          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Rank</span>
-        </button>
-
-        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'history' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
-          <LogIcon />
-          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Log</span>
-        </button>
-
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
-          <ProfileIcon />
-          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Profil</span>
-        </button>
-
+      <div className="fixed bottom-0 left-0 right-0 bg-[#141b2b]/95 border-t border-slate-800/80 backdrop-blur-xl py-2 px-4 flex justify-around items-center z-50 max-w-md mx-auto rounded-t-3xl shadow-2xl">
+        <button onClick={() => setActiveTab('break')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'break' ? 'text-blue-400 scale-105' : 'text-slate-400'}`}><BreakIcon /><span className="text-[9px] font-extrabold uppercase mt-0.5">Break</span></button>
+        <button onClick={() => setActiveTab('live')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'live' ? 'text-blue-400 scale-105' : 'text-slate-400'}`}><LiveIcon /><span className="text-[9px] font-extrabold uppercase mt-0.5">Live</span></button>
+        <button onClick={() => setActiveTab('leaderboard')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'leaderboard' ? 'text-blue-400 scale-105' : 'text-slate-400'}`}><RankIcon /><span className="text-[9px] font-extrabold uppercase mt-0.5">Rank</span></button>
+        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'history' ? 'text-blue-400 scale-105' : 'text-slate-400'}`}><LogIcon /><span className="text-[9px] font-extrabold uppercase mt-0.5">Log</span></button>
+        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-105' : 'text-slate-400'}`}><ProfileIcon /><span className="text-[9px] font-extrabold uppercase mt-0.5">Profil</span></button>
       </div>
 
     </div>

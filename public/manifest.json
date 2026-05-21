@@ -1,0 +1,21 @@
+{
+  "short_name": "BPPHAR",
+  "name": "BPPHAR Operation System",
+  "icons": [
+    {
+      "src": "https://ui-avatars.com/api/?name=BP&background=070a11&color=3b82f6&size=192&bold=true&rounded=false",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://ui-avatars.com/api/?name=BP&background=070a11&color=3b82f6&size=512&bold=true&rounded=false",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#070a11",
+  "theme_color": "#070a11",
+  "display": "standalone",
+  "orientation": "portrait"
+}

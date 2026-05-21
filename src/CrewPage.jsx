@@ -2,18 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import Webcam from 'react-webcam';
 import { supabase } from './SupabaseClient';
 
-// --- Komponen Ikon Premium SVG ---
-const CoffeeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>
+// --- Komponen Ikon Premium SVG untuk Bottom Navigation ---
+const BreakIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>
 );
-const WorkIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+const LiveIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="15" x="2" y="3" rx="2" ry="2"/><polyline points="12 18 12 21"/><polyline points="17 21 7 21"/></svg>
 );
-const CameraIcon = () => (
+const RankIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34"/><path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z"/></svg>
+);
+const LogIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+);
+const ProfileIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+);
+
+// Ikon tambahan untuk tombol ubah foto profil
+const CameraSmallIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
 
-export default function CrewPage({ user, onLogout }) {
+export default function CrewPage({ user, onLogout, onBack }) {
+  // Ambil tab terakhir yang disimpan di localStorage agar ketika di-reload tidak melompat halamannya
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('bengon_active_tab') || 'break';
+  });
+
   const [currentBreak, setCurrentBreak] = useState(null);
   const [history, setHistory] = useState([]);
   const [leaderboard, setLeaderboard] = useState({ efficient: [], undisciplined: [] });
@@ -30,6 +46,7 @@ export default function CrewPage({ user, onLogout }) {
   const [dbProfileUrl, setDbProfileUrl] = useState(null);
   const [greeting, setGreeting] = useState('Selamat Bekerja');
 
+  // State Filter History Log
   const [searchName, setSearchName] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterTime, setFilterTime] = useState('month');
@@ -54,6 +71,55 @@ export default function CrewPage({ user, onLogout }) {
     } catch (e) {
       return dateObj;
     }
+  };
+
+  // Simpan riwayat tab aktif saat ini ke local storage agar persisten sewaktu direfresh
+  useEffect(() => {
+    localStorage.setItem('bengon_active_tab', activeTab);
+  }, [activeTab]);
+
+  // --- AI VOICE REMINDER TEXT-TO-SPEECH ---
+  const playAlarmSound = (type, crewName = '') => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+
+      synth.cancel(); 
+
+      let textToSpeak = '';
+      if (type === 'warning') {
+        textToSpeak = `Perhatian untuk ${crewName}. Waktu istirahat Anda sisa lima menit lagi. Ayo siap-siap masuk dan kembali ke posisi kerja. Terima kasih.`;
+      } else if (type === 'over') {
+        textToSpeak = `Peringatan darurat. ${crewName} waktu istirahat Anda telah habis dan melewati batas! Segera kembali ke stasiun kerja sekarang juga!`;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.lang = 'id-ID'; 
+      utterance.rate = 1.0;     
+      utterance.pitch = 1.1;    
+
+      synth.speak(utterance);
+    } catch (e) {
+      console.log("AI Speech diblokir browser.");
+    }
+  };
+
+  // --- FUNGSI GEOTAG LOCK LOKASI GPS ---
+  const getCurrentLocation = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve({ lat: null, lng: null });
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+        },
+        (error) => {
+          resolve({ lat: null, lng: null });
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
   };
 
   useEffect(() => {
@@ -94,7 +160,6 @@ export default function CrewPage({ user, onLogout }) {
         const diffInMinutes = Math.floor(diffInSeconds / 60);
 
         if (diffInMinutes >= 55 && diffInMinutes < 60 && !hasReminded) {
-          alert(`Halo ${user.name}, waktu istirahat tinggal 5 menit lagi ya! Yuk bersiap-siap kembali ke station kerja.`);
           setHasReminded(true);
         }
 
@@ -244,6 +309,8 @@ export default function CrewPage({ user, onLogout }) {
 
     try {
       setUploading(true);
+      const location = await getCurrentLocation();
+
       const blob = dataURLtoBlob(imageSrc);
       const fileName = `${user.id}-${Date.now()}-${cameraMode}.jpg`;
       const filePath = `selfies/${fileName}`;
@@ -260,7 +327,9 @@ export default function CrewPage({ user, onLogout }) {
             user_id: user.id,
             start_time: new Date().toISOString(),
             status: 'on_break',
-            photo_url: publicUrl
+            photo_url: publicUrl,
+            latitude: location.lat,
+            longitude: location.lng
           }])
           .select()
           .single();
@@ -269,17 +338,16 @@ export default function CrewPage({ user, onLogout }) {
         setCurrentBreak(data);
       } else {
         const endTime = new Date();
-        const startTime = new Date(currentBreak.start_time);
-        const diffInMinutes = (endTime.getTime() - startTime.getTime()) / 60000;
-        const finalStatus = diffInMinutes > 60 ? 'over_break' : 'completed';
+        const finalStatus = (endTime - new Date(currentBreak.start_time)) / 60000 > 60 ? 'over_break' : 'completed';
 
-        // UPDATE DATABASE UNTUK MENYIMPAN FOTO KEDUA
         const { error: updateError } = await supabase
           .from('break_logs')
           .update({ 
             end_time: endTime.toISOString(), 
             status: finalStatus,
-            photo_end_url: publicUrl
+            photo_end_url: publicUrl,
+            latitude_end: location.lat,
+            longitude_end: location.lng
           })
           .eq('id', currentBreak.id);
 
@@ -322,377 +390,380 @@ export default function CrewPage({ user, onLogout }) {
       const duration = Math.round((new Date(log.end_time) - new Date(log.start_time)) / 60000);
       return `${duration} menit`;
     }
-    const elapsedSeconds = Math.floor((currentTime.getTime() - new Date(log.start_time).getTime()) / 1000);
-    const remainingSeconds = (60 * 60) - elapsedSeconds;
 
-    if (remainingSeconds <= 0) {
-      const overSeconds = Math.abs(remainingSeconds);
-      return <span className="text-rose-400 font-black animate-pulse">Lewat {Math.floor(overSeconds / 60)}m {overSeconds % 60}s!</span>;
-    } else {
+    const start = new Date(log.start_time).getTime();
+    const now = new Date().getTime();
+    const elapsedSeconds = Math.floor((now - start) / 1000);
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    const targetName = log.users?.name || 'Crew';
+
+    if (elapsedMinutes >= 55 && elapsedMinutes < 60) {
+      if (elapsedSeconds % 20 === 0) playAlarmSound('warning', targetName);
+    }
+
+    if (elapsedMinutes >= 60) {
+      if (elapsedSeconds % 10 === 0) playAlarmSound('over', targetName);
+    }
+
+    if (elapsedMinutes < 60) {
+      const remainingSeconds = (60 * 60) - elapsedSeconds;
+      const remMins = Math.floor(remainingSeconds / 60);
+      const remSecs = remainingSeconds % 60;
+      
       return (
         <div className="flex flex-col">
-          <span className="text-blue-400 font-mono font-black tracking-tight animate-pulse">Sisa {Math.floor(remainingSeconds / 60)}m {remainingSeconds % 60}s</span>
-          <span className="text-[9px] text-slate-500 font-normal">Jalan: {Math.floor(elapsedSeconds / 60)}m</span>
+          {elapsedMinutes >= 55 ? (
+            <div className="text-amber-400 font-mono font-black tracking-tight animate-bounce flex flex-col">
+              <span>⚠️ SIAP MASUK! ({remMins}m {remSecs}s)</span>
+              <span className="text-[8px] bg-amber-500/10 border border-amber-500/30 text-center py-0.5 rounded mt-1 font-sans font-normal text-slate-300">
+                Rapikan station kerja!
+              </span>
+            </div>
+          ) : (
+            <>
+              <span className="text-blue-400 font-mono font-black tracking-tight animate-pulse">Sisa {remMins}m {remSecs}s</span>
+              <span className="text-[9px] text-slate-500 font-normal">Jalan: {elapsedMinutes}m</span>
+            </>
+          )}
+        </div>
+      );
+    } else {
+      const overMinutes = elapsedMinutes - 60;
+      const overSeconds = elapsedSeconds % 60;
+      return (
+        <div className="flex flex-col items-end">
+          <span className="text-rose-400 font-black animate-pulse tracking-tighter">
+            🚨 OVER BREAK {overMinutes}m {overSeconds}s!
+          </span>
+          <span className="text-[8px] bg-rose-500/20 border border-rose-500/30 text-rose-300 px-2 py-0.5 rounded mt-1 font-bold">
+            ALARM AKTIF CALL MANAGER
+          </span>
         </div>
       );
     }
   };
 
-  // PERBAIKAN LOGIKA AVATAR PROFIL (TIDAK AKAN MENGAMBIL FOTO BREAK LAGI)
   const getProfileAvatar = () => {
     if (dbProfileUrl) return dbProfileUrl;
-    // Jika belum upload, beri inisial bawaan yang profesional
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff&bold=true`;
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans antialiased pb-12">
+    <div className="min-h-screen bg-[#070a11] text-slate-100 font-sans pb-24 relative overflow-hidden flex flex-col justify-between">
       
-      {/* NAVBAR */}
-      <nav className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full overflow-hidden border-2 border-blue-500/50 shadow-md bg-slate-800">
-              <img src={getProfileAvatar()} className="w-full h-full object-cover" alt="User Profile" />
+      <div className="bg-slate-900/60 border-b border-slate-800/80 backdrop-blur-xl px-5 py-4 flex justify-between items-center sticky top-0 z-50 max-w-md w-full mx-auto rounded-b-2xl">
+        <div>
+          <span className="text-[9px] font-mono tracking-widest text-blue-400 font-bold uppercase">BPPHAR SYSTEM</span>
+          <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user.name}</h1>
+        </div>
+        <div className="flex gap-1.5">
+          {user.role === 'manager' && (
+            <button onClick={onBack} className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400">Hub</button>
+          )}
+          <button onClick={onLogout} className="bg-rose-950/40 border border-rose-900/60 hover:bg-rose-900/30 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-rose-400">Keluar</button>
+        </div>
+      </div>
+
+      <div className="flex-1 p-5 max-w-md w-full mx-auto">
+
+        {/* TAB 1: BREAK */}
+        {activeTab === 'break' && (
+          <div className="space-y-5">
+            <div className="bg-gradient-to-r from-blue-900/20 to-slate-900/40 border border-slate-800/60 p-4 rounded-2xl flex items-center gap-3 shadow-md">
+              <span className="text-base">💡</span>
+              <p className="text-[11px] font-medium text-slate-300 italic">"{dailyQuote}"</p>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-300">{greeting}, <span className="text-blue-400 font-black">{user.name}</span></span>
-                <span className="px-2 py-0.5 rounded text-[8px] font-black font-mono bg-blue-600/20 text-blue-400 border border-blue-500/30 uppercase">
-                  {user.role}
-                </span>
+
+            <div className="text-center py-1">
+              <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full font-black text-[10px] uppercase border
+                ${status === 'Standby Kerja' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
+                ${status === 'Sedang Istirahat' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse' : ''}
+                ${status === 'Waktu Break Habis (Over!)' ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : ''}
+              `}>
+                <span className={`h-1.5 w-1.5 rounded-full ${status === 'Standby Kerja' ? 'bg-emerald-400' : status === 'Sedang Istirahat' ? 'bg-blue-400' : 'bg-rose-400'}`}></span>
+                {status}
               </div>
-              <p className="text-[10px] text-slate-500 font-medium">Zona Waktu: WITA (Asia/Makassar)</p>
             </div>
-          </div>
-          <button onClick={onLogout} className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 hover:bg-rose-600/20 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold transition-all">
-            Keluar Aplikasi
-          </button>
-        </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        
-        {/* Banner Motivasi */}
-        <div className="mb-6 bg-gradient-to-r from-blue-900/40 via-indigo-900/30 to-slate-900 border border-blue-800/40 p-4 rounded-2xl flex items-center gap-3 shadow-lg">
-          <div className="bg-blue-600/20 p-2 rounded-xl border border-blue-500/30 text-blue-400 text-lg">💡</div>
-          <p className="text-xs sm:text-sm font-medium text-slate-200 tracking-wide italic">"{dailyQuote}"</p>
-        </div>
-
-        {/* KARTU PROFIL MANDIRI */}
-        <div className="mb-6 bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-800 p-6 rounded-2xl shadow-xl grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-          <div className="flex items-center gap-4 col-span-1 border-r border-slate-800 pb-4 md:pb-0">
-            <div className="relative">
-              <img src={getProfileAvatar()} className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-700 shadow" alt="" />
-              <button 
-                onClick={() => profileInputRef.current.click()}
-                className="absolute -bottom-1.5 -right-1.5 bg-blue-600 p-1.5 rounded-lg border border-slate-900 text-white hover:bg-blue-500 transition-colors"
-                title="Ganti Foto Profil"
-              >
-                <CameraIcon />
-              </button>
-              <input type="file" hidden ref={profileInputRef} accept="image/*" onChange={handleProfileImageUpload} />
-            </div>
-            <div>
-              <h3 className="text-base font-black text-white">{user.name}</h3>
-              <p className="text-xs text-slate-400 capitalize mt-0.5 font-medium">Jabatan: <span className="text-slate-200 font-bold uppercase">{user.role.replace('_',' ')}</span></p>
-            </div>
-          </div>
-          
-          <div className="flex flex-col items-center md:items-start col-span-1 border-r border-slate-800 pb-4 md:pb-0 justify-center">
-            <span className="text-slate-500 text-[9px] font-bold uppercase tracking-widest mb-1.5">Badge Keaktifan Bulan Ini</span>
-            <span className={`px-4 py-1.5 rounded-xl text-xs font-black tracking-wide text-white bg-gradient-to-r shadow-md shadow-black/20 ${getBadge().color}`}>
-              👑 {getBadge().label}
-            </span>
-          </div>
-
-          <div className="flex flex-col items-center justify-center col-span-1">
-            <span className="text-slate-500 text-[9px] font-bold uppercase tracking-widest mb-0.5">Poin Reward Lapangan</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-3xl font-black font-mono tracking-tight ${dbUserPoints >= 100 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {dbUserPoints}
-              </span>
-              <span className="text-xs text-slate-500 font-bold uppercase">PTS</span>
-            </div>
-            <p className="text-[9px] text-slate-500 font-medium text-center mt-1">
-              ( Tepat Waktu: <span className="text-emerald-500">+10 Pts</span> | Terlambat: <span className="text-rose-500">-1 Pts/Menit</span> )
-            </p>
-          </div>
-        </div>
-
-        {/* WORKSPACE OPERASIONAL TERMINAL */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1">
-            <div className="bg-slate-800/40 border border-slate-800/80 p-5 rounded-2xl shadow-xl flex flex-col justify-between min-h-[380px]">
-              <div className="text-center w-full">
-                <h2 className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Status Kamu Sekarang</h2>
-                
-                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-bold text-[11px] uppercase border
-                  ${status === 'Standby Kerja' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
-                  ${status === 'Sedang Istirahat' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse' : ''}
-                  ${status === 'Waktu Break Habis (Over!)' ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : ''}
-                `}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${status === 'Standby Kerja' ? 'bg-emerald-400' : status === 'Sedang Istirahat' ? 'bg-blue-400' : 'bg-rose-400'}`}></span>
-                  {status}
-                </div>
-
-                {timer > 0 && (
-                  <div className="mt-5 p-4 bg-slate-950/40 rounded-xl border border-slate-800">
-                    <p className="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1">Durasi Istirahat (Maks 60 Menit)</p>
-                    <span className="text-3xl font-mono font-black text-white tracking-tight">{formatTimer(timer)}</span>
-                  </div>
-                )}
+            <div className="bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800/80 p-8 rounded-[2.5rem] shadow-2xl text-center backdrop-blur-xl relative">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3">DURASI ISTIRAHAT (MAKS 60 MENIT)</p>
+              <div className="text-5xl font-mono font-black text-white tracking-tight">
+                {formatTimer(timer)}
               </div>
+              <div className="h-1.5 bg-slate-950 rounded-full mt-6 overflow-hidden p-0.5 border border-slate-900">
+                <div 
+                  className={`h-full rounded-full transition-all duration-1000 ${timer > 3600 ? 'bg-rose-500 shadow-[0_0_10px_#f43f5e]' : 'bg-blue-500 shadow-[0_0_10px_#3b82f6]'}`}
+                  style={{ width: `${Math.min((timer / 3600) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
 
-              {showCamera && (
-                <div className="my-3 overflow-hidden rounded-xl border border-blue-500/40 shadow-md relative bg-slate-950">
-                  <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full object-cover scale-x-[-1]" />
-                  <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] text-blue-400 font-bold uppercase">
-                    Mode: {cameraMode === 'start' ? 'Masuk Break' : 'Kembali Kerja'}
-                  </div>
+            {showCamera && (
+              <div className="overflow-hidden rounded-2xl border border-blue-500/40 shadow-lg relative bg-slate-950">
+                <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full object-cover scale-x-[-1]" />
+                <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[8px] text-blue-400 font-bold uppercase tracking-wide">
+                  📍 GEOTAG LOCK AKTIF
                 </div>
-              )}
+              </div>
+            )}
 
-              <div className="w-full mt-4">
-                {!currentBreak ? (
-                  !showCamera ? (
-                    <button onClick={() => triggerCamera('start')} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-blue-600/10 transition-all text-xs tracking-wide uppercase">
-                      <CoffeeIcon /> Mulai Istirahat
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-700 hover:bg-slate-600 text-slate-300 py-3 rounded-xl transition text-xs font-bold uppercase">Batal</button>
-                      <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition text-xs tracking-wide uppercase">
-                        {uploading ? 'Mengunci...' : 'Foto & Mulai'}
-                      </button>
-                    </div>
-                  )
+            <div className="pt-2">
+              {!currentBreak ? (
+                !showCamera ? (
+                  <button onClick={() => triggerCamera('start')} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-4 rounded-2xl shadow-xl transition-all text-xs tracking-widest uppercase">
+                    ☕ Ambil Absen Break Sekarang
+                  </button>
                 ) : (
-                  !showCamera ? (
-                    <button onClick={() => triggerCamera('end')} className="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all text-xs tracking-wide uppercase">
-                      <WorkIcon /> Selesai Istirahat
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest">
+                      {uploading ? 'Mengunci GPS...' : 'Foto & Mulai Break'}
                     </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-700 hover:bg-slate-600 text-slate-300 py-3 rounded-xl transition text-xs font-bold uppercase">Batal</button>
-                      <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl transition text-xs tracking-wide uppercase">
-                        {uploading ? 'Verifikasi...' : 'Foto & Kerja'}
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-2">
-            <div className="bg-slate-800/40 border border-slate-800/80 p-5 rounded-2xl shadow-xl h-full flex flex-col">
-              <h3 className="text-xs font-bold tracking-wider uppercase text-slate-300 mb-4 flex items-center gap-2 border-b border-slate-800/60 pb-3">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500/80"></span>
-                </span>
-                Live Monitor Break Tim
-              </h3>
-              
-              <div className="overflow-x-auto flex-1">
-                <table className="w-full text-left text-xs text-slate-400">
-                  <thead>
-                    <tr className="text-slate-500 border-b border-slate-800 pb-2 font-mono text-[10px] uppercase">
-                      <th className="p-3">Foto Mulai</th>
-                      <th className="p-3">Nama</th>
-                      <th className="p-3">Jam Mulai (WITA)</th>
-                      <th className="p-3">Lama Break / Sisa Waktu</th>
-                      <th className="p-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {history.filter(h => !h.end_time).length === 0 ? (
-                      <tr><td colSpan="5" className="text-center py-12 text-slate-500 font-medium">Saat ini tidak ada rekan tim yang sedang beristirahat.</td></tr>
-                    ) : (
-                      history.filter(h => !h.end_time).map((log) => {
-                        const start = toWITATime(new Date(log.start_time));
-                        return (
-                          <tr key={log.id} className="hover:bg-slate-800/20 transition-colors">
-                            <td className="p-3">
-                              <img src={log.photo_url} className="h-9 w-9 rounded-xl object-cover border border-slate-700 shadow-sm" alt="Start" />
-                            </td>
-                            <td className="p-3 font-bold text-slate-200">{log.users?.name} {log.user_id === user.id && <span className="text-[10px] text-blue-400 font-normal ml-1">(Kamu)</span>}</td>
-                            <td className="p-3 font-mono text-slate-400">
-                              {start.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: "Asia/Makassar" })}
-                            </td>
-                            <td className="p-3 font-bold">{renderLiveStatusOrDuration(log)}</td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse">istirahat</span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* METRIK TIM */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <div className="bg-slate-800/20 border border-slate-800/60 p-5 rounded-2xl shadow-md">
-            <h3 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mb-3 uppercase tracking-wider">🏆 Peringkat Poin Tertinggi (Bakal Dapat Penghargaan)</h3>
-            <div className="divide-y divide-slate-800/40 text-xs">
-              {leaderboard.efficient.slice(0, 2).map((u, i) => (
-                <div key={i} className="py-2.5 flex justify-between items-center px-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-300">{i + 1}. {u.name}</span>
                   </div>
-                  <span className="text-emerald-400 font-mono font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-slate-800/20 border border-slate-800/60 p-5 rounded-2xl shadow-md">
-            <h3 className="text-xs font-bold text-rose-400 flex items-center gap-1.5 mb-3 uppercase tracking-wider">⚠️ Peringkat Kru Paling Bebal (Lebih Dari 60m)</h3>
-            <div className="divide-y divide-slate-800/40 text-xs">
-              {leaderboard.undisciplined.length === 0 ? (
-                <p className="text-slate-500 text-center py-4 font-medium">Bulan ini belum ada data kru bebal. Pertahankan! 👍</p>
+                )
               ) : (
-                leaderboard.undisciplined.slice(0, 2).map((u, i) => (
-                  <div key={i} className="py-2.5 flex justify-between items-center px-1">
-                    <span className="font-semibold text-slate-300">{i + 1}. {u.name}</span>
-                    <span className="bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded text-[10px] font-bold">{u.violationCount}x Melanggar</span>
+                !showCamera ? (
+                  <button onClick={() => triggerCamera('end')} className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-black py-4 px-4 rounded-2xl shadow-xl transition-all text-xs tracking-widest">
+                    🧳 Selesai Istirahat (Kembali Kerja)
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest">
+                      {uploading ? 'Verifikasi GPS...' : 'Foto & Selesai'}
+                    </button>
                   </div>
-                ))
+                )
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* MODUL ARSIP SEJARAH DAN LIVE SEARCH */}
-        <div className="bg-slate-800/40 border border-slate-800/80 p-5 rounded-2xl shadow-xl mt-6">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 pb-3 border-b border-slate-800/60">
-            <div>
-              <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                📁 Riwayat & Pencarian Arsip Break Lengkap
-              </h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-medium">Audit data absen seluruh kru, manager, dan struktur berdasarkan periode waktu tanggal</p>
+        {/* TAB 2: LIVE */}
+        {activeTab === 'live' && (
+          <div className="space-y-4">
+            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500/80"></span>
+              </span>
+              Live Monitor Break Tim Resto
+            </h3>
+
+            {history.filter(h => !h.end_time).length === 0 ? (
+              <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-8 text-center text-slate-500 text-xs font-medium font-mono">
+                Saat ini tidak ada rekan tim yang sedang beristirahat.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {history.filter(h => !h.end_time).map((log) => {
+                  const start = toWITATime(new Date(log.start_time));
+                  return (
+                    <div key={log.id} className="bg-slate-900/50 border border-slate-800/80 p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-blue-500">
+                      <div className="flex items-center gap-3">
+                        <img src={log.photo_url} className="h-10 w-10 rounded-xl object-cover border border-slate-700 shadow-sm" alt="" />
+                        <div>
+                          <h4 className="text-xs font-black text-white capitalize">{log.users?.name} {log.user_id === user.id && <span className="text-[9px] text-blue-400 font-normal">(Kamu)</span>}</h4>
+                          <p className="text-[9px] font-mono font-bold text-slate-500 uppercase mt-0.5">{log.users?.role.replace('_',' ')}</p>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <p className="text-[10px] text-slate-400 font-bold">{start.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
+                        <div className="mt-1 text-[11px] font-bold">{renderLiveStatusOrDuration(log)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: LEADERBOARD */}
+        {activeTab === 'leaderboard' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-3xl shadow-sm">
+              <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Poin Tertinggi</h4>
+              <div className="divide-y divide-slate-800/40 text-xs">
+                {leaderboard.efficient.slice(0, 3).map((u, i) => (
+                  <div key={i} className="py-2.5 flex justify-between items-center">
+                    <span className="font-bold text-slate-300">{i + 1}. {u.name} <span className="text-[8px] font-mono text-slate-500 uppercase">({u.role})</span></span>
+                    <span className="text-emerald-400 font-mono font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            
-            <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
-              <input 
-                type="text" 
-                placeholder="Cari nama kru..." 
-                value={searchName} 
-                onChange={(e) => setSearchName(e.target.value)} 
-                className="border border-slate-800 px-3 py-1.5 rounded-xl text-xs bg-transparent text-slate-200 outline-none focus:border-blue-500 transition-colors w-32" 
-              />
-              
-              <select 
-                value={filterRole} 
-                onChange={(e) => setFilterRole(e.target.value)} 
-                className="border border-slate-800 px-3 py-1.5 rounded-xl text-xs bg-slate-900 text-slate-300 outline-none focus:border-blue-500"
-              >
-                <option value="all">Semua Jabatan</option>
-                <option value="crew">Crew</option>
-                <option value="new_structure">New Structure</option>
-                <option value="manager">Manager</option>
-              </select>
 
-              <select 
-                value={filterTime} 
-                disabled={!!filterDate}
-                onChange={(e) => setFilterTime(e.target.value)} 
-                className="border border-slate-800 px-3 py-1.5 rounded-xl text-xs bg-slate-900 text-slate-300 outline-none focus:border-blue-500 disabled:opacity-40"
-              >
-                <option value="day">Hari Ini</option>
-                <option value="week">7 Hari Terakhir</option>
-                <option value="month">30 Hari Terakhir</option>
-              </select>
-
-              <div className="flex items-center gap-2">
-                <input 
-                  type="date" 
-                  value={filterDate} 
-                  onChange={(e) => setFilterDate(e.target.value)} 
-                  className="bg-transparent border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 outline-none focus:border-blue-500 cursor-pointer" 
-                  style={{ colorScheme: 'dark' }}
-                />
-                {filterDate && (
-                  <button onClick={() => setFilterDate('')} className="text-[10px] text-rose-400 font-bold hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded-lg">Reset</button>
+            <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-3xl shadow-sm">
+              <h4 className="text-xs font-black uppercase text-rose-400 tracking-wider mb-3 flex items-center gap-1.5">⚠️ Peringkat Kru Paling Bebal (&gt;60m)</h4>
+              <div className="divide-y divide-slate-800/40 text-xs">
+                {leaderboard.undisciplined.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4 font-medium">Buku pelanggaran bersih. Pertahankan! 👍</p>
+                ) : (
+                  leaderboard.undisciplined.slice(0, 3).map((u, i) => (
+                    <div key={i} className="py-2.5 flex justify-between items-center">
+                      <span className="font-bold text-slate-300">{i + 1}. {u.name}</span>
+                      <span className="bg-rose-500/10 text-rose-400 border border-rose-900/30 px-2 py-0.5 rounded text-[10px] font-mono font-bold">{u.violationCount}x Melanggar</span>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
           </div>
+        )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-400">
-              <thead>
-                <tr className="text-slate-500 border-b border-slate-800 pb-2 font-mono text-[10px] uppercase bg-slate-950/20">
-                  <th className="p-3">Bukti Foto (Mulai - Selesai)</th>
-                  <th className="p-3">Nama</th>
-                  <th className="p-3">Jabatan</th>
-                  <th className="p-3">Tanggal & Waktu (WITA)</th>
-                  <th className="p-3">Total Durasi</th>
-                  <th className="p-3">Status Akhir</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {history.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-10 text-slate-500 font-medium">
-                      Data tidak ditemukan. Silakan sesuaikan kembali filter pencarian.
-                    </td>
-                  </tr>
-                ) : (
-                  history.map((log) => {
-                    const start = toWITATime(new Date(log.start_time));
-                    return (
-                      <tr key={log.id} className="hover:bg-slate-800/20 transition-all duration-150">
-                        <td className="p-3">
-                          <div className="flex gap-2">
-                            <a href={log.photo_url} target="_blank" rel="noreferrer" className="inline-block" title="Foto Mulai Break">
-                              <img src={log.photo_url} className="h-8 w-8 object-cover rounded-lg border border-slate-700 shadow-sm" alt="Mulai" />
+        {/* TAB 4: HISTORY */}
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl space-y-2 flex flex-col">
+              <input type="text" placeholder="Cari nama kru..." value={searchName} onChange={(e) => setSearchName(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-200 outline-none focus:border-blue-500 w-full" />
+              <div className="grid grid-cols-2 gap-2">
+                <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-400 font-bold outline-none">
+                  <option value="all">Semua Jabatan</option>
+                  <option value="crew">Crew</option>
+                  <option value="stocker">Stocker</option>
+                  <option value="quality_control">QC</option>
+                  <option value="cel">Cel</option>
+                  <option value="manager">Manager</option>
+                </select>
+                <select value={filterTime} disabled={!!filterDate} onChange={(e) => setFilterTime(e.target.value)} className="border border-slate-800 px-3 py-2 rounded-xl text-xs bg-slate-950 text-slate-400 font-bold outline-none disabled:opacity-40">
+                  <option value="day">Hari Ini</option>
+                  <option value="week">7 Hari Lalu</option>
+                  <option value="month">30 Hari Lalu</option>
+                </select>
+              </div>
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-300 outline-none cursor-pointer" style={{ colorScheme: 'dark' }} />
+              {filterDate && <button onClick={() => setFilterDate('')} className="text-[10px] text-rose-400 font-bold py-1 bg-rose-500/10 rounded-lg">Reset Kalender</button>}
+            </div>
+
+            <div className="space-y-2">
+              {history.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 font-mono text-xs">Arsip data tidak ditemukan.</div>
+              ) : (
+                history.map((log) => {
+                  const start = toWITATime(new Date(log.start_time));
+                  return (
+                    <div key={log.id} className="bg-slate-900/30 border border-slate-800/60 p-4 rounded-xl flex flex-col gap-3 font-mono text-xs shadow-md">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-slate-200 capitalize">{log.users?.name}</h4>
+                          <span className="text-[8px] uppercase font-bold text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 inline-block mt-1">{log.users?.role.replace('_',' ')}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border
+                          ${log.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
+                          ${log.status === 'over_break' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
+                          ${log.status === 'on_break' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : ''}
+                        `}>
+                          {log.status === 'over_break' ? 'lewat batas' : log.status === 'on_break' ? 'berjalan' : 'selesai'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-slate-950/40 p-2 rounded-xl border border-slate-900/50">
+                        <div className="flex gap-2">
+                          <a href={log.photo_url} target="_blank" rel="noreferrer" title="Foto Mulai">
+                            <img src={log.photo_url} className="h-9 w-9 object-cover rounded-lg border border-slate-700 shadow" alt="In" />
+                          </a>
+                          {log.photo_end_url ? (
+                            <a href={log.photo_end_url} target="_blank" rel="noreferrer" title="Foto Selesai">
+                              <img src={log.photo_end_url} className="h-9 w-9 object-cover rounded-lg border border-slate-700 shadow" alt="Out" />
                             </a>
-                            {log.photo_end_url ? (
-                              <a href={log.photo_end_url} target="_blank" rel="noreferrer" className="inline-block" title="Foto Selesai Break">
-                                <img src={log.photo_end_url} className="h-8 w-8 object-cover rounded-lg border border-slate-700 shadow-sm" alt="Selesai" />
-                              </a>
-                            ) : (
-                              <div className="h-8 w-8 rounded-lg border border-slate-700 border-dashed flex items-center justify-center bg-slate-800/50 text-[8px] text-slate-500" title="Belum Selesai">-</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-3 font-bold text-slate-200">{log.users?.name}</td>
-                        <td className="p-3">
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-slate-800 text-slate-400">
-                            {log.users?.role === 'new_structure' ? 'New Structure' : log.users?.role}
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono text-slate-400 text-[11px]">
-                          {start.toLocaleDateString('id-ID')} — {start.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: "Asia/Makassar" })}
-                        </td>
-                        <td className="p-3 font-bold text-slate-300">
-                          {log.end_time ? `${Math.round((new Date(log.end_time) - new Date(log.start_time)) / 60000)} menit` : <span className="text-blue-400 font-medium animate-pulse">Berjalan...</span>}
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border tracking-wider
-                            ${log.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
-                            ${log.status === 'over_break' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
-                            ${log.status === 'on_break' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : ''}
-                          `}>
-                            {log.status === 'over_break' ? 'lewat batas' : log.status === 'on_break' ? 'berjalan' : 'selesai'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          ) : (
+                            <div className="h-9 w-9 rounded-lg border border-slate-800 border-dashed flex items-center justify-center text-[8px] text-slate-600 font-sans">Jalan...</div>
+                          )}
+                        </div>
+                        
+                        {log.latitude && (
+                          <a 
+                            href={`https://www.google.com/maps?q=${log.latitude},${log.longitude}`} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20"
+                          >
+                            📍 Lokasi GPS
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="flex justify-between text-[10px] text-slate-500 border-t border-slate-900/60 pt-2 font-mono">
+                        <span>{start.toLocaleDateString('id-ID')} ({start.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit' })})</span>
+                        <span className="font-black text-slate-300">{log.end_time ? `${Math.round((new Date(log.end_time) - new Date(log.start_time)) / 60000)} menit` : 'Berjalan...'}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
-      </main>
+        )}
+
+        {/* TAB 5: PROFILE CARD INTEGRATED (FIXED BLANK BUG) */}
+        {activeTab === 'profile' && (
+          <div className="space-y-4 animate-fadeIn">
+            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800/80 p-6 rounded-[2rem] shadow-xl text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-r from-blue-600/10 to-teal-500/10 blur-xl"></div>
+              
+              <div className="relative h-20 h-20 w-20 mx-auto mb-3 z-10">
+                <img src={getProfileAvatar()} className="w-full h-full object-cover rounded-2xl border-2 border-slate-700 shadow-md" alt="" />
+                <button onClick={() => profileInputRef.current.click()} className="absolute -bottom-1 -right-1 bg-blue-600 p-1.5 rounded-lg border border-slate-900 text-white hover:bg-blue-500 shadow-lg flex items-center justify-center">
+                  <CameraSmallIcon />
+                </button>
+                <input type="file" hidden ref={profileInputRef} accept="image/*" onChange={handleProfileImageUpload} disabled={uploading} />
+              </div>
+
+              <h2 className="text-base font-black tracking-tight text-white capitalize">{user.name}</h2>
+              <span className="inline-block bg-slate-800/60 border border-slate-700/50 px-3 py-0.5 rounded-full text-[9px] font-mono uppercase font-black tracking-wider mt-1 text-slate-300">
+                ROLE: {user.role.replace('_',' ')}
+              </span>
+
+              <div className="grid grid-cols-2 gap-2.5 mt-6 font-mono">
+                <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-900 text-center">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Badge Bulan Ini</p>
+                  <p className="text-[10px] font-bold text-amber-400 mt-1">👑 {getBadge().label}</p>
+                </div>
+                <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-900 text-center">
+                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Poin Reward</p>
+                  <p className="text-sm font-black text-blue-400 mt-0.5">{dbUserPoints} <span className="text-[9px] text-slate-500">PTS</span></p>
+                </div>
+              </div>
+              <p className="text-[9px] text-slate-500 font-medium font-mono text-center mt-4 border-t border-slate-800/60 pt-3">
+                Aturan Skor: Tepat Waktu +10 Pts | Terlambat: -1 Pts/Menit
+              </p>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* --- FIXED BOTTOM NAVIGATION BAR --- */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-950/90 border-t border-slate-900 backdrop-blur-xl py-2 px-4 flex justify-around items-center z-50 max-w-md mx-auto rounded-t-3xl shadow-2xl">
+        
+        <button onClick={() => setActiveTab('break')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'break' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
+          <BreakIcon />
+          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Break</span>
+        </button>
+
+        <button onClick={() => setActiveTab('live')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'live' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
+          <LiveIcon />
+          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Live</span>
+        </button>
+
+        <button onClick={() => setActiveTab('leaderboard')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'leaderboard' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
+          <RankIcon />
+          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Rank</span>
+        </button>
+
+        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'history' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
+          <LogIcon />
+          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Log</span>
+        </button>
+
+        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 py-1 px-3 transition-all ${activeTab === 'profile' ? 'text-blue-400 scale-105' : 'text-slate-500'}`}>
+          <ProfileIcon />
+          <span className="text-[9px] font-black uppercase tracking-wider mt-0.5">Profil</span>
+        </button>
+
+      </div>
+
     </div>
   );
 }

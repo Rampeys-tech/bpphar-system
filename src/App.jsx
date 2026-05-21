@@ -9,17 +9,13 @@ export default function App() {
   const [error, setError] = useState('');
   const [currentScreen, setCurrentScreen] = useState('hub'); 
   const [liveWita, setLiveWita] = useState('');
-
-  // State untuk mengontrol perpindahan antara mode Login dan Daftar (Register)
   const [isRegisterMode, setIsRegisterMode] = useState(false);
 
-  // Form State untuk Login & Register Mandiri Anggota Tim
-  const [username, setUsername] = useState(''); // Bertindak sebagai Email Kerja
+  const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState(''); // Khusus Register
-  const [selectedRole, setSelectedRole] = useState('crew'); // Khusus Register
+  const [fullName, setFullName] = useState(''); 
+  const [selectedRole, setSelectedRole] = useState('crew'); 
 
-  // Live Clock WITA (Asia/Makassar) untuk dipasang di Widget Dashboard Atas
   useEffect(() => {
     const clock = setInterval(() => {
       try {
@@ -36,14 +32,17 @@ export default function App() {
     return () => clearInterval(clock);
   }, []);
 
-  // Cek sesi login aktif yang tersimpan di browser
   useEffect(() => {
     const savedUser = localStorage.getItem('bengon_session');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser);
+      setUser(parsed);
+      const isFrontline = ['crew', 'stocker', 'quality_control', 'cel'].includes(parsed.role);
+      setCurrentScreen(isFrontline ? 'absen' : 'hub');
+    }
     setLoading(false);
   }, []);
 
-  // --- FUNGSI MASUK DASHBOARD (LOGIN) ---
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!username || !password) return;
@@ -58,7 +57,7 @@ export default function App() {
         setUser(profile);
         localStorage.setItem('bengon_session', JSON.stringify(profile));
         
-        // KUNCI REVISI HAK AKSES: Crew, Stocker, Quality Control, dan Cel langsung dikunci ke Absen Break
+        // KUNCI AKSES KETAT: Crew, Stocker, QC, dan CEL langsung dikunci ke Absen Break tanpa masuk HUB
         const isFrontline = ['crew', 'stocker', 'quality_control', 'cel'].includes(profile.role);
         setCurrentScreen(isFrontline ? 'absen' : 'hub');
       } else {
@@ -70,7 +69,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // --- FUNGSI DAFTAR AKUN TIM BARU (VERSI AMAN LOCK ID KETAT) ---
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!username || !password || !fullName || !selectedRole) {
@@ -80,31 +78,20 @@ export default function App() {
     setError('');
 
     try {
-      // 1. Daftarkan kredensial login ke Supabase Authentication
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: username,
-        password: password,
-      });
-
+      const { data: authData, error: authError } = await supabase.auth.signUp({ email: username, password });
       if (authError) throw authError;
 
       if (authData?.user?.id) {
-        // Jeda 1 detik agar trigger profile bawaan database selesai di-inisialisasi
         await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // 2. Gunakan .update() untuk menimpa data profile kosong yang baru saja dibuat oleh authData tadi
         const { error: profileError } = await supabase
           .from('users')
-          .update({
-            name: fullName,
-            role: selectedRole, // Menyetel role sesuai dropdown (Stocker, QC, Cel, dll)
-          })
-          .eq('id', authData.user.id); // KUNCI MATI: Hanya mengubah data milik ID user baru ini saja!
+          .update({ name: fullName, role: selectedRole })
+          .eq('id', authData.user.id);
 
         if (profileError) throw profileError;
 
         alert(`Sukses mendaftarkan anggota tim baru: ${fullName}! Silakan dicoba login.`);
-        setIsRegisterMode(false); // Kembalikan ke panel login utama
+        setIsRegisterMode(false);
         setUsername('');
         setPassword('');
         setFullName('');
@@ -118,7 +105,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // --- FUNGSI KELUAR APLIKASI (LOGOUT) ---
   const handleLogout = () => {
     setUser(null);
     setCurrentScreen('hub');
@@ -134,7 +120,6 @@ export default function App() {
     );
   }
 
-  // --- RENDERING TAMPILAN JIKA USER BERHASIL LOGIN ---
   if (user) {
     if (currentScreen === 'absen') {
       return <CrewPage user={user} onLogout={handleLogout} onBack={() => setCurrentScreen('hub')} />;
@@ -150,7 +135,6 @@ export default function App() {
 
         <div className="w-full max-w-md bg-slate-900/40 border border-slate-800/80 backdrop-blur-2xl p-6 rounded-[2.5rem] shadow-2xl flex flex-col justify-between relative z-10">
           <div>
-            {/* GRADIENT BOX PROFILE */}
             <div className="bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800/80 p-5 rounded-3xl shadow-xl mb-6 relative">
               <div className="flex justify-between items-center">
                 <div>
@@ -165,7 +149,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TIMESTAMPS COUNTER */}
               <div className="grid grid-cols-2 gap-2 mt-5 pt-4 border-t border-slate-800/60 text-center font-mono text-[11px]">
                 <div className="bg-slate-950/40 py-2 rounded-xl border border-slate-900">
                   <p className="text-[8px] font-bold text-slate-500 uppercase">Hari Ini</p>
@@ -183,7 +166,6 @@ export default function App() {
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Terminal Operasional Berjalan Stabil</p>
             </div>
 
-            {/* SELEK UTAMA NAVIGATION BUTTON */}
             <div className="space-y-3">
               <button onClick={() => setCurrentScreen('absen')} className="w-full bg-slate-900/40 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 p-5 rounded-2xl text-left transition-all flex items-center justify-between group shadow-lg">
                 <div className="flex items-center gap-4">
@@ -217,7 +199,6 @@ export default function App() {
     );
   }
 
-  // --- TAMPILAN HALAMAN LOGIN & REGISTRASI ---
   return (
     <div className="min-h-screen bg-[#070a11] flex justify-center items-center p-4 font-sans">
       <div className="w-full max-w-sm bg-slate-900/40 border border-slate-800/80 backdrop-blur-2xl p-8 rounded-[2.5rem] shadow-2xl">

@@ -14,5 +14,14 @@
   <body class="bg-gray-50">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker aktif, Bos!', reg))
+            .catch(err => console.log('Gagal aktif:', err));
+        });
+      }
+    </script>
   </body>
 </html>

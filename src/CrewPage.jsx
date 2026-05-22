@@ -253,15 +253,15 @@ export default function CrewPage({ user, onLogout, onBack }) {
     if (data) setHistory(data);
   };
 
-  // --- REVISI QUANTUM SINKRONISASI TOTAL POINTS RIIL SUPABASE ---
+  // --- LOGIKA UTAMA: PERLEBAR SLICE DATA KELUARAN SUPABASE AGAR DATA TIDAK HILANG ---
   const fetchMetrics = async () => {
-    const { data: logs } = await supabase.from('break_logs').select('*, users(name, role, points)');
+    const { data: logs } = await supabase.from('break_logs').select('*, users(name, role)');
     if (!logs) return;
 
     const stats = {};
     logs.forEach(log => {
       if (!stats[log.user_id]) {
-        stats[log.user_id] = { id: log.user_id, name: log.users?.name, role: log.users?.role, points: log.users?.points ?? 100, totalOverMinutes: 0, violationCount: 0 };
+        stats[log.user_id] = { id: log.user_id, name: log.users?.name, role: log.users?.role, totalOverMinutes: 0, violationCount: 0 };
       }
       if (log.end_time) {
         const duration = (new Date(log.end_time) - new Date(log.start_time)) / 60000;
@@ -273,7 +273,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
     const sorted = Object.values(stats);
     setLeaderboard({
-      efficient: [...sorted].sort((a, b) => b.points - a.points).slice(0, 30),
+      efficient: [...sorted].sort((a, b) => a.totalOverMinutes - b.totalOverMinutes).slice(0, 30),
       undisciplined: [...sorted].filter(u => u.violationCount > 0).sort((a, b) => b.violationCount - a.violationCount).slice(0, 30)
     });
   };
@@ -292,7 +292,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
       const { data: { publicUrl } } = supabase.storage.from('break-photos').getPublicUrl(filePath);
 
-      const { error: updateError = null } = await supabase.from('users').update({ profile_url: publicUrl }).eq('id', user.id);
+      const { error: updateError } = await supabase.from('users').update({ profile_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
 
       setDbProfileUrl(publicUrl);
@@ -382,7 +382,15 @@ export default function CrewPage({ user, onLogout, onBack }) {
         const finalStatus = (endTime - new Date(currentBreak.start_time)) / 60000 > 60 ? 'over_break' : 'completed';
 
         const { error: updateError } = await supabase
-          .from('break_logs').update({ end_time: endTime.toISOString(), status: finalStatus, photo_end_url: publicUrl, latitude_end: location.lat, longitude_end: location.lng }).eq('id', currentBreak.id);
+          .from('break_logs')
+          .update({ 
+            end_time: endTime.toISOString(), 
+            status: finalStatus,
+            photo_end_url: publicUrl,
+            latitude_end: location.lat,
+            longitude_end: location.lng
+          })
+          .eq('id', currentBreak.id);
 
         if (updateError) throw updateError;
         
@@ -393,7 +401,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
       setShowCamera(false);
     } catch (error) {
       alert("Error sistem: " + error.message);
-    } finally { // --- FINALLY DISINI SUDAH FIX BERSIH TANPA TYPO ---
+    } finally {
       setUploading(false);
     }
   };
@@ -584,7 +592,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 ) : (
                   <div className="flex gap-2">
                     <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
-                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest uppercase">
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl text-xs tracking-widest uppercase">
                       {uploading ? 'Memproses GPS...' : 'Foto & Selesai'}
                     </button>
                   </div>
@@ -619,7 +627,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                         <img src={log.photo_url} className="h-10 w-10 rounded-full object-cover border border-slate-700 shadow-sm" alt="" />
                         <div>
                           <h4 className="text-xs font-black text-white capitalize">{log.users?.name} {log.user_id === user.id && <span className="text-[9px] text-blue-400 font-normal">(Kamu)</span>}</h4>
-                          <p className="text-[9px] font-mono font-bold text-slate-400 uppercase mt-0.5">{log.users?.role?.replace('_',' ')}</p>
+                          <p className="text-[9px] font-mono font-bold text-slate-500 uppercase mt-0.5">{log.users?.role?.replace('_',' ')}</p>
                         </div>
                       </div>
                       <div className="text-right font-mono">
@@ -634,7 +642,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
-        {/* TAB 3: LEADERBOARD INTERAKTIF */}
+        {/* TAB 3: LEADERBOARD INTERAKTIF (PENGAMAN FILTER JABATAN KOMPLIT) */}
         {activeTab === 'leaderboard' && (
           <div className="space-y-4 animate-fadeIn">
             {/* Navigasi Sub-Tab Pilihan Jabatan */}
@@ -650,7 +658,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
             <div className="space-y-4">
               <div className="bg-[#141b2b]/70 border border-slate-800/60 p-5 rounded-3xl shadow-sm">
-                <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Paling Rajin</h4>
+                <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Poin Tertinggi</h4>
                 <div className="divide-y divide-slate-800/40 text-xs font-mono">
                   {getFilteredLeaderboardList('efficient').length === 0 ? (
                     <p className="text-slate-400 text-center py-4 text-[11px]">Belum ada data nilai divisi terkumpul Bos.</p>
@@ -658,7 +666,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                     getFilteredLeaderboardList('efficient').map((u, i) => (
                       <div key={u.id || i} className="py-2.5 flex justify-between items-center">
                         <span className="font-bold text-slate-200">{i + 1}. {u.name} <span className="text-[9px] text-slate-500 font-normal">({u.role?.replace('_', ' ')})</span></span>
-                        <span className="text-emerald-400 font-bold text-[10px]">{u.points} PTS</span>
+                        <span className="text-emerald-400 font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
                       </div>
                     ))
                   )}
@@ -705,6 +713,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 </select>
               </div>
               <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-[#0b0f19] border border-slate-800/60 px-3 py-2 rounded-xl text-xs text-slate-300 outline-none cursor-pointer" style={{ colorScheme: 'dark' }} />
+              {filterDate && <button onClick={() => setFilterDate('')} className="text-[10px] text-rose-400 font-bold py-1 bg-rose-500/10 rounded-lg">Reset Kalender</button>}
             </div>
 
             <div className="space-y-2">

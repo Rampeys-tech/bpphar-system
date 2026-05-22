@@ -19,20 +19,22 @@ const ProfileIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 );
 
+// Ikon tambahan untuk tombol ubah foto profil
 const CameraSmallIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
 
 export default function CrewPage({ user, onLogout, onBack }) {
+  // Ambil tab terakhir yang disimpan di localStorage agar ketika di-reload tidak melompat halamannya
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('bengon_active_tab') || 'break';
   });
 
+  // State navigasi internal untuk sub-tab halaman Rank (default disesuaikan hak akses agar aman dari blank screen)
   const [activeRankSubTab, setActiveRankSubTab] = useState(() => {
-    const currentRole = (user?.role || '').toLowerCase().trim();
-    if (['stocker', 'quality_control', 'quality control', 'cel'].includes(currentRole)) return 'ns';
-    if (currentRole === 'manager') return 'manager';
-    return 'crew';
+    if (user.role === 'crew') return 'crew';
+    if (['stocker', 'quality_control', 'cel'].includes(user.role)) return 'ns';
+    return 'manager';
   });
 
   const [currentBreak, setCurrentBreak] = useState(null);
@@ -51,6 +53,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   const [dbProfileUrl, setDbProfileUrl] = useState(null);
   const [greeting, setGreeting] = useState('Selamat Bekerja');
 
+  // State Filter History Log
   const [searchName, setSearchName] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterTime, setFilterTime] = useState('month');
@@ -69,10 +72,14 @@ export default function CrewPage({ user, onLogout, onBack }) {
     "Kerja cerdas, kerja ikhlas. Energi positifmu menular ke seluruh tim! 🤝"
   ];
 
+  // =========================================================
+  // 📍 DATA KOORDINAT OUTLET MIE GACOAN BALIKPAPAN MT HARYONO
+  // =========================================================
   const RESTO_LAT = -1.242491; 
   const RESTO_LNG = 116.861343; 
   const RADIUS_MAKSIMAL_METER = 50;
 
+  // Rumus Haversine menghitung meteran jarak asli di bumi
   const checkGeofenceRadius = (lat1, lon1, lat2, lon2) => {
     const R = 6371000; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -92,14 +99,17 @@ export default function CrewPage({ user, onLogout, onBack }) {
     }
   };
 
+  // Simpan riwayat tab aktif saat ini ke local storage agar persisten sewaktu direfresh
   useEffect(() => {
     localStorage.setItem('bengon_active_tab', activeTab);
   }, [activeTab]);
 
+  // --- AI VOICE REMINDER TEXT-TO-SPEECH ---
   const playAlarmSound = (type, crewName = '') => {
     try {
       const synth = window.speechSynthesis;
       if (!synth) return;
+
       synth.cancel(); 
 
       let textToSpeak = '';
@@ -113,12 +123,14 @@ export default function CrewPage({ user, onLogout, onBack }) {
       utterance.lang = 'id-ID'; 
       utterance.rate = 1.0;     
       utterance.pitch = 1.1;    
+
       synth.speak(utterance);
     } catch (e) {
       console.log("AI Speech diblokir browser.");
     }
   };
 
+  // --- FUNGSI GEOTAG LOCK LOKASI GPS ---
   const getCurrentLocation = () => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
@@ -128,7 +140,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
         (position) => {
           resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
         },
-        () => {
+        (error) => {
           resolve({ lat: null, lng: null });
         },
         { enableHighAccuracy: true, timeout: 5000 }
@@ -192,7 +204,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   }, [currentBreak, hasReminded]);
 
   const fetchUserDBData = async () => {
-    const { data } = await supabase.from('users').select('points, profile_url').eq('id', user?.id).maybeSingle();
+    const { data } = await supabase.from('users').select('points, profile_url').eq('id', user.id).maybeSingle();
     if (data) {
       if (data.points !== undefined && data.points !== null) setDbUserPoints(data.points);
       if (data.profile_url) setDbProfileUrl(data.profile_url);
@@ -200,7 +212,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   };
 
   const fetchActiveBreak = async () => {
-    const { data } = await supabase.from('break_logs').select('*').eq('user_id', user?.id).eq('status', 'on_break').maybeSingle();
+    const { data } = await supabase.from('break_logs').select('*').eq('user_id', user.id).eq('status', 'on_break').maybeSingle();
     if (data) setCurrentBreak(data);
   };
 
@@ -241,26 +253,27 @@ export default function CrewPage({ user, onLogout, onBack }) {
     if (data) setHistory(data);
   };
 
+  // --- REVISI QUANTUM SINKRONISASI TOTAL POINTS RIIL SUPABASE ---
   const fetchMetrics = async () => {
-    const { data: logs } = await supabase.from('break_logs').select('*, users(name, role)');
+    const { data: logs } = await supabase.from('break_logs').select('*, users(name, role, points)');
     if (!logs) return;
 
     const stats = {};
     logs.forEach(log => {
       if (!stats[log.user_id]) {
-        stats[log.user_id] = { id: log.user_id, name: log.users?.name, role: log.users?.role, totalOverMinutes: 0, violationCount: 0 };
+        stats[log.user_id] = { id: log.user_id, name: log.users?.name, role: log.users?.role, points: log.users?.points ?? 100, totalOverMinutes: 0, violationCount: 0 };
       }
       if (log.end_time) {
         const duration = (new Date(log.end_time) - new Date(log.start_time)) / 60000;
         const overTime = Math.max(0, duration - 60);
         stats[log.user_id].totalOverMinutes += overTime;
-        if (overTime > 2) stats[log.user_id].violationCount += 1;
+        if (overTime > 0) stats[log.user_id].violationCount += 1;
       }
     });
 
     const sorted = Object.values(stats);
     setLeaderboard({
-      efficient: [...sorted].sort((a, b) => a.totalOverMinutes - b.totalOverMinutes).slice(0, 30),
+      efficient: [...sorted].sort((a, b) => b.points - a.points).slice(0, 30),
       undisciplined: [...sorted].filter(u => u.violationCount > 0).sort((a, b) => b.violationCount - a.violationCount).slice(0, 30)
     });
   };
@@ -279,7 +292,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
       const { data: { publicUrl } } = supabase.storage.from('break-photos').getPublicUrl(filePath);
 
-      const { error: updateError } = await supabase.from('users').update({ profile_url: publicUrl }).eq('id', user.id);
+      const { error: updateError = null } = await supabase.from('users').update({ profile_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
 
       setDbProfileUrl(publicUrl);
@@ -325,6 +338,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
       setUploading(true);
       const location = await getCurrentLocation();
 
+      // --- VALIDASI GEOLOCK MULTILATERAL REKREASI RESTO ---
       if (!location.lat || !location.lng) {
         alert("🚨 VALIDASI GPS GAGAL!\nHarap pastikan pengaturan GPS/Lokasi di HP kamu sudah AKTIF sebelum melakukan absen break.");
         setUploading(false);
@@ -368,15 +382,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
         const finalStatus = (endTime - new Date(currentBreak.start_time)) / 60000 > 60 ? 'over_break' : 'completed';
 
         const { error: updateError } = await supabase
-          .from('break_logs')
-          .update({ 
-            end_time: endTime.toISOString(), 
-            status: finalStatus,
-            photo_end_url: publicUrl,
-            latitude_end: location.lat,
-            longitude_end: location.lng
-          })
-          .eq('id', currentBreak.id);
+          .from('break_logs').update({ end_time: endTime.toISOString(), status: finalStatus, photo_end_url: publicUrl, latitude_end: location.lat, longitude_end: location.lng }).eq('id', currentBreak.id);
 
         if (updateError) throw updateError;
         
@@ -387,7 +393,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
       setShowCamera(false);
     } catch (error) {
       alert("Error sistem: " + error.message);
-    } finally {
+    } finally { // --- FINALLY DISINI SUDAH FIX BERSIH TANPA TYPO ---
       setUploading(false);
     }
   };
@@ -472,9 +478,10 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
   const getProfileAvatar = () => {
     if (dbProfileUrl) return dbProfileUrl;
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=0D8ABC&color=fff&bold=true`;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0D8ABC&color=fff&bold=true`;
   };
 
+  // --- SOLUSI FILTER LEVEL RENDER: SINKRONISASI COCOK PERAN HAK AKSES JABATAN ---
   const isRoleMatchingTab = (dbRole, selectedTab) => {
     if (!dbRole) return false;
     const lowerRole = dbRole.toLowerCase().replace('_', ' ').trim();
@@ -484,6 +491,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
     return false;
   };
 
+  // Membagi penomoran peringkat dinamis terisolasi per sub-tab yang aktif klik harian
   const getFilteredLeaderboardList = (listType) => {
     const baseList = listType === 'efficient' ? leaderboard.efficient : leaderboard.undisciplined;
     return baseList.filter(u => isRoleMatchingTab(u.role, activeRankSubTab)).slice(0, 5);
@@ -492,6 +500,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   return (
     <div className="min-h-screen bg-[#0a0f1d] text-slate-200 font-sans pb-24 relative overflow-hidden flex flex-col justify-between tracking-tight">
       
+      {/* HEADER UTAMA: LUXURY SLATE DENGAN MINI AVATAR BULAT STRATEGIS */}
       <div className="bg-[#141b2b]/95 border-b border-slate-800/80 backdrop-blur-md px-5 py-4 flex justify-between items-center sticky top-0 z-50 max-w-md w-full mx-auto rounded-b-2xl shadow-xl">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full p-0.5 bg-gradient-to-tr from-blue-500 via-slate-700 to-emerald-400 shadow-md">
@@ -499,11 +508,11 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
           <div>
             <span className="text-[10px] font-mono tracking-widest text-blue-400 font-extrabold uppercase">BPPHAR SYSTEM</span>
-            <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user?.name}</h1>
+            <h1 className="text-sm font-black text-white tracking-tight mt-0.5 capitalize">Halo, {user.name}</h1>
           </div>
         </div>
         <div className="flex gap-1.5">
-          {user?.role === 'manager' && (
+          {user.role === 'manager' && (
             <button onClick={onBack} className="bg-slate-900/80 hover:bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-300">Hub</button>
           )}
           <button onClick={onLogout} className="bg-rose-950/60 border border-rose-900/40 hover:bg-rose-900/30 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-rose-400">Keluar</button>
@@ -512,6 +521,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
       <div className="flex-1 p-5 max-w-md w-full mx-auto space-y-4">
 
+        {/* TAB 1: BREAK */}
         {activeTab === 'break' && (
           <div className="space-y-5 animate-fadeIn">
             <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl flex items-center gap-3 shadow-inner">
@@ -574,7 +584,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 ) : (
                   <div className="flex gap-2">
                     <button onClick={() => setShowCamera(false)} className="w-1/3 bg-slate-800 border border-slate-700 text-slate-400 py-4 rounded-2xl text-xs font-bold">Batal</button>
-                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl text-xs tracking-widest uppercase">
+                    <button onClick={handleCaptureSelfie} disabled={uploading} className="w-2/3 bg-orange-600 hover:bg-orange-500 text-white font-black py-4 rounded-2xl transition text-xs tracking-widest uppercase">
                       {uploading ? 'Memproses GPS...' : 'Foto & Selesai'}
                     </button>
                   </div>
@@ -584,6 +594,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
+        {/* TAB 2: LIVE */}
         {activeTab === 'live' && (
           <div className="space-y-4 animate-fadeIn">
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
@@ -623,13 +634,15 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
+        {/* TAB 3: LEADERBOARD INTERAKTIF */}
         {activeTab === 'leaderboard' && (
           <div className="space-y-4 animate-fadeIn">
+            {/* Navigasi Sub-Tab Pilihan Jabatan */}
             <div className="flex bg-[#0f1422] p-1 rounded-xl border border-slate-800 shadow-inner">
-              {user?.role === 'manager' && (
+              {user.role === 'manager' && (
                 <button onClick={() => setActiveRankSubTab('manager')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'manager' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Manager</button>
               )}
-              {['manager', 'stocker', 'quality_control', 'cel'].includes(user?.role) && (
+              {['manager', 'stocker', 'quality_control', 'cel'].includes(user.role) && (
                 <button onClick={() => setActiveRankSubTab('ns')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'ns' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>New Structure</button>
               )}
               <button onClick={() => setActiveRankSubTab('crew')} className={`flex-1 py-2 text-center text-[10px] font-extrabold uppercase tracking-wider rounded-lg transition-all ${activeRankSubTab === 'crew' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Crew</button>
@@ -637,7 +650,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
 
             <div className="space-y-4">
               <div className="bg-[#141b2b]/70 border border-slate-800/60 p-5 rounded-3xl shadow-sm">
-                <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Poin Tertinggi</h4>
+                <h4 className="text-xs font-black uppercase text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">🏆 Peringkat Paling Rajin</h4>
                 <div className="divide-y divide-slate-800/40 text-xs font-mono">
                   {getFilteredLeaderboardList('efficient').length === 0 ? (
                     <p className="text-slate-400 text-center py-4 text-[11px]">Belum ada data nilai divisi terkumpul Bos.</p>
@@ -645,7 +658,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
                     getFilteredLeaderboardList('efficient').map((u, i) => (
                       <div key={u.id || i} className="py-2.5 flex justify-between items-center">
                         <span className="font-bold text-slate-200">{i + 1}. {u.name} <span className="text-[9px] text-slate-500 font-normal">({u.role?.replace('_', ' ')})</span></span>
-                        <span className="text-emerald-400 font-bold text-[10px]">Tepat Waktu (+10 Pts)</span>
+                        <span className="text-emerald-400 font-bold text-[10px]">{u.points} PTS</span>
                       </div>
                     ))
                   )}
@@ -671,6 +684,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
+        {/* TAB 4: HISTORY */}
         {activeTab === 'history' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="bg-[#141b2b]/60 border border-slate-800/50 p-4 rounded-2xl space-y-2 flex flex-col">
@@ -728,8 +742,16 @@ export default function CrewPage({ user, onLogout, onBack }) {
                             <div className="h-9 w-9 rounded-full border border-slate-800 border-dashed flex items-center justify-center text-[8px] text-slate-600 font-sans">Jalan...</div>
                           )}
                         </div>
+                        
                         {log.latitude && (
-                          <a href={`http://googleusercontent.com/maps.google.com/?q=${log.latitude},${log.longitude}`} target="_blank" rel="noreferrer" className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20">📍 Lokasi GPS</a>
+                          <a 
+                            href={`http://googleusercontent.com/maps.google.com/?q=${log.latitude},${log.longitude}`} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/40 px-2.5 py-1.5 rounded-lg border border-blue-900/40 hover:bg-blue-900/20"
+                          >
+                            📍 Lokasi GPS
+                          </a>
                         )}
                       </div>
 
@@ -745,6 +767,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
           </div>
         )}
 
+        {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="bg-gradient-to-br from-[#141b2b] via-[#141b2b] to-[#0b0f19] border border-slate-800/60 p-6 rounded-[2rem] shadow-xl text-center relative overflow-hidden">
@@ -758,9 +781,9 @@ export default function CrewPage({ user, onLogout, onBack }) {
                 <input type="file" hidden ref={profileInputRef} accept="image/*" onChange={handleProfileImageUpload} disabled={uploading} />
               </div>
 
-              <h2 className="text-base font-black tracking-tight text-white capitalize">{user?.name}</h2>
+              <h2 className="text-base font-black tracking-tight text-white capitalize">{user.name}</h2>
               <span className="inline-block bg-[#0b0f19]/60 border border-slate-800/50 px-3 py-0.5 rounded-full text-[9px] font-mono uppercase font-black tracking-wider mt-1.5 text-slate-300">
-                ROLE: {user?.role?.replace('_',' ')}
+                ROLE: {user.role.replace('_',' ')}
               </span>
 
               <div className="grid grid-cols-2 gap-2.5 mt-6 font-mono">

@@ -77,6 +77,7 @@ export default function CrewPage({ user, onLogout, onBack }) {
   // =========================================================
   const RESTO_LAT = -1.242491; 
   const RESTO_LNG = 116.861343; 
+  const RADIUS_MAKSIMAL_METER = 5000;
 
   // Rumus Haversine menghitung meteran jarak asli di bumi
   const checkGeofenceRadius = (lat1, lon1, lat2, lon2) => {
